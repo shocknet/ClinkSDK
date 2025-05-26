@@ -1,0 +1,8 @@
+tsconfig.json
+src
+.env
+node_modules
+dist
+small.mp4
+small2.mp4
+.npmrc
