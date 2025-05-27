@@ -9,23 +9,23 @@ export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: stri
 export type NdebitSuccess = { res: 'ok' }
 export type NdebitSuccessPayment = { res: 'ok', preimage: string }
 export type NdebitFailure = { res: 'GFY', error: string, code: number }
-export type Nip68Response = NdebitSuccess | NdebitSuccessPayment | NdebitFailure
+export type NdebitResponse = NdebitSuccess | NdebitSuccessPayment | NdebitFailure
 
-export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], pubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<Nip68Response> => {
+export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], pubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse> => {
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, pubKey))
-    const event = newNip68Event(content, publicKey, pubKey)
+    const event = newNdebitEvent(content, publicKey, pubKey)
     const signed = finalizeEvent(event, privateKey)
     await Promise.all(pool.publish(relays, signed))
-    return new Promise<Nip68Response>((res, rej) => {
+    return new Promise<NdebitResponse>((res, rej) => {
         let closer: SubCloser = { close: () => { } }
         let timer: NodeJS.Timeout | null = null
         if (timeoutSeconds) {
             timer = setTimeout(() => {
-                closer.close(); rej('failed to get nip69 response in time')
+                closer.close(); rej('failed to get ndebit response in time')
             }, timeoutSeconds * 1000)
         }
-        closer = pool.subscribeMany(relays, [newNip68Filter(publicKey, signed.id)], {
+        closer = pool.subscribeMany(relays, [newNdebitFilter(publicKey, signed.id)], {
             onevent: async (e) => {
                 if (timer) clearTimeout(timer)
                 const content = decrypt(e.content, getConversationKey(privateKey, pubKey))
@@ -35,23 +35,23 @@ export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Ui
     })
 }
 
-export const newFullAccessRequest = (): NdebitData => {
+export const newNdebitFullAccessRequest = (): NdebitData => {
     return {}
 }
-export const newPaymentRequest = (invoice: string, amount?: number): NdebitData => {
+export const newNdebitPaymentRequest = (invoice: string, amount?: number): NdebitData => {
     return {
         bolt11: invoice,
         amount_sats: amount
     }
 }
-export const newBudgetRequest = (frequency: BudgetFrequency, amount: number): NdebitData => {
+export const newNdebitBudgetRequest = (frequency: BudgetFrequency, amount: number): NdebitData => {
     return {
         amount_sats: amount,
         frequency: frequency
     }
 }
 
-export const newNip68Event = (content: string, fromPub: string, toPub: string) => ({
+export const newNdebitEvent = (content: string, fromPub: string, toPub: string) => ({
     content,
     created_at: Math.floor(Date.now() / 1000),
     kind: 21002,
@@ -59,7 +59,7 @@ export const newNip68Event = (content: string, fromPub: string, toPub: string) =
     tags: [['p', toPub]]
 })
 
-export const newNip68Filter = (publicKey: string, eventId: string) => ({
+export const newNdebitFilter = (publicKey: string, eventId: string) => ({
     since: Math.floor(Date.now() / 1000) - 1,
     kinds: [21002],
     '#p': [publicKey],

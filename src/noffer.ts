@@ -3,23 +3,23 @@ import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 const { getConversationKey, decrypt, encrypt } = nip44
 
 export type NofferData = { offer: string, amount?: number, zap?: string, payer_data?: any }
-export type Nip69Success = { bolt11: string }
-export type Nip69Error = { code: number, error: string, range: { min: number, max: number } }
-export type Nip69Response = Nip69Success | Nip69Error
+export type NofferSuccess = { bolt11: string }
+export type NofferError = { code: number, error: string, range: { min: number, max: number } }
+export type NofferResponse = NofferSuccess | NofferError
 
-export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30): Promise<Nip69Response> => {
+export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30): Promise<NofferResponse> => {
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, toPubKey))
-    const event = newNip69Event(content, publicKey, toPubKey)
+    const event = newNofferEvent(content, publicKey, toPubKey)
     const signed = finalizeEvent(event, privateKey)
     await Promise.all(pool.publish(relays, signed))
-    return new Promise<Nip69Response>((res, rej) => {
+    return new Promise<NofferResponse>((res, rej) => {
         let closer: SubCloser = { close: () => { } }
         const timeout = setTimeout(() => {
-            closer.close(); rej("failed to get nip69 response in time")
+            closer.close(); rej("failed to get noffer response in time")
         }, timeoutSeconds * 1000)
 
-        closer = pool.subscribeMany(relays, [newNip69Filter(publicKey, signed.id)], {
+        closer = pool.subscribeMany(relays, [newNofferFilter(publicKey, signed.id)], {
             onevent: async (e) => {
                 clearTimeout(timeout)
                 const content = decrypt(e.content, getConversationKey(privateKey, toPubKey))
@@ -29,7 +29,7 @@ export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Ui
     })
 }
 
-export const newNip69Event = (content: string, fromPub: string, toPub: string) => ({
+export const newNofferEvent = (content: string, fromPub: string, toPub: string) => ({
     content,
     created_at: Math.floor(Date.now() / 1000),
     kind: 21001,
@@ -37,7 +37,7 @@ export const newNip69Event = (content: string, fromPub: string, toPub: string) =
     tags: [['p', toPub]]
 })
 
-export const newNip69Filter = (publicKey: string, eventId: string) => ({
+export const newNofferFilter = (publicKey: string, eventId: string) => ({
     since: Math.floor(Date.now() / 1000) - 1,
     kinds: [21001],
     '#p': [publicKey],

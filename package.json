@@ -1,6 +1,6 @@
 {
     "name": "@shocknet/clink-sdk",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "description": "sdk client for clink",
     "main": "build/index.js",
     "scripts": {
@@ -13,6 +13,8 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "@noble/hashes": "^1.8.0",
+        "@scure/base": "^1.2.5",
         "nostr-tools": "^2.13.0",
         "rimraf": "^6.0.1",
         "typescript": "^5.8.3"

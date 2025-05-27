@@ -1,8 +1,12 @@
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { SimplePool } from "nostr-tools"
-import { SendNofferRequest, NofferData } from "./noffer"
-import { NdebitData } from "./ndebit"
-import { SendNdebitRequest } from "./ndebit"
+import { SendNofferRequest, NofferData } from "./noffer.js"
+import { NdebitData } from "./ndebit.js"
+import { SendNdebitRequest } from "./ndebit.js"
+
+
+
+
 //pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30
 
 export type CLinkSettings = {
@@ -12,7 +16,7 @@ export type CLinkSettings = {
     defaultTimeoutSeconds?: number
 }
 
-class CLinkSDK {
+export class CLinkSDK {
     pool: AbstractSimplePool
     settings: CLinkSettings
     constructor(settings: CLinkSettings, pool?: AbstractSimplePool) {
@@ -33,6 +37,6 @@ class CLinkSDK {
     }
 }
 
-export default CLinkSDK
-export const NofferReq = SendNofferRequest
-export const NdebitReq = SendNdebitRequest
+export * from "./noffer.js"
+export * from "./ndebit.js"
+export * from "./nip19Extension.js"
