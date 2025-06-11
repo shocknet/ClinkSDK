@@ -95,7 +95,7 @@ const sdk = new ClinkSDK({
   toPubKey: '<wallet_service_pubkey_hex>',
 });
 
-// request the service to pay an invoice, (may require user approvation)
+// Request the service to pay an invoice
 const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id')
 
 sdk.Ndebit(simplePaymentRequest).then(response => {
@@ -106,7 +106,7 @@ sdk.Ndebit(simplePaymentRequest).then(response => {
   }
 });
 
-// make all future payment request from this user not need user approvation (requires user approvation)
+// Request whitelisting for future payment requests
 const fullAccessRequest = newNdebitFullAccessRequest('my_pointer_id')
 
 sdk.Ndebit(fullAccessRequest).then(response => {
@@ -117,7 +117,7 @@ sdk.Ndebit(fullAccessRequest).then(response => {
   }
 });
 
-// setup a budget that does not require user approvation (requires user approvation)
+// Request a budget
 const budgetRequest = newNdebitBudgetRequest({ number: 1, unit: 'week' }, 1000, 'my_pointer_id')
 
 sdk.Ndebit(budgetRequest).then(response => {
