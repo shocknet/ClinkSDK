@@ -56,7 +56,7 @@ export const newNdebitEvent = (content: string, fromPub: string, toPub: string) 
     created_at: Math.floor(Date.now() / 1000),
     kind: 21002,
     pubkey: fromPub,
-    tags: [['p', toPub]]
+    tags: [['p', toPub], ['clink_version', '1']]
 })
 
 export const newNdebitFilter = (publicKey: string, eventId: string) => ({
