@@ -6,11 +6,11 @@
 
 ## Overview
 
-`@shocknet/clink-sdk` provides a simple, robust interface for working with [CLINK](https://github.com/shocknet/CLINK/blob/main/README.md) (`noffer1...` and `ndebit1...`) on Nostr. It enables applications and wallets to create, encode, decode, send, and receive CLINK payment requests and authorizations using Nostr relays, with full support for NIP-44 encryption and the CLINK protocol.
+`@shocknet/clink-sdk` provides a simple, robust interface for working with [CLINK](https://github.com/shocknet/CLINK/) (`noffer1...` and `ndebit1...`) on Nostr. It enables applications and wallets to create, encode, decode, send, and receive CLINK payment requests and authorizations using Nostr relays, with full support for NIP-44 encryption and the CLINK protocol.
 
 - **No web server or Onion Messaging required:** Unlike LNURL and Bolt12, all communication is over Nostr relays.
 - **Compatible with [Lightning.Pub](https://github.com/shocknet/Lightning.Pub), [ShockWallet](https://shockwallet.app), and other CLINK-enabled apps.**
-- **Implements the official [CLINK protocol](https://github.com/shocknet/CLINK/blob/main/README.md).**
+- **Implements the official [CLINK protocol](https://github.com/shocknet/CLINK).**
 
 ---
 
@@ -139,7 +139,7 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 
 ## Protocol
 
-- [CLINK Protocol Overview](https://github.com/shocknet/CLINK/blob/main/README.md)
+- [CLINK Protocol Overview](https://github.com/shocknet/CLINK)
 
 ---
 
