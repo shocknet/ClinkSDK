@@ -34,7 +34,7 @@ export const newNofferEvent = (content: string, fromPub: string, toPub: string) 
     created_at: Math.floor(Date.now() / 1000),
     kind: 21001,
     pubkey: fromPub,
-    tags: [['p', toPub]]
+    tags: [['p', toPub], ['clink_version', '1']]
 })
 
 export const newNofferFilter = (publicKey: string, eventId: string) => ({

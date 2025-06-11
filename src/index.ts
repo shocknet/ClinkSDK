@@ -9,17 +9,17 @@ import { SendNdebitRequest } from "./ndebit.js"
 
 //pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30
 
-export type CLinkSettings = {
+export type ClinkSettings = {
     privateKey: Uint8Array
     relays: string[]
     toPubKey: string
     defaultTimeoutSeconds?: number
 }
 
-export class CLinkSDK {
+export class ClinkSDK {
     pool: AbstractSimplePool
-    settings: CLinkSettings
-    constructor(settings: CLinkSettings, pool?: AbstractSimplePool) {
+    settings: ClinkSettings
+    constructor(settings: ClinkSettings, pool?: AbstractSimplePool) {
         this.settings = settings
         if (pool) {
             this.pool = pool
