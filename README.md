@@ -95,19 +95,39 @@ const sdk = new ClinkSDK({
   toPubKey: '<wallet_service_pubkey_hex>',
 });
 
-const request: NdebitData = {
-  pointer: 'my_pointer_id',
-  amount_sats: 5000,
-  bolt11: '<BOLT11_invoice_string>',
-};
+// request the service to pay an invoice, (may require user approvation)
+const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id')
 
-sdk.Ndebit(request).then(response => {
+sdk.Ndebit(simplePaymentRequest).then(response => {
   if (response.res === 'ok' && 'preimage' in response) {
     console.log('Payment preimage:', response.preimage);
   } else if (response.res === 'GFY') {
     console.error('Debit error:', response.error);
   }
 });
+
+// make all future payment request from this user not need user approvation (requires user approvation)
+const fullAccessRequest = newNdebitFullAccessRequest('my_pointer_id')
+
+sdk.Ndebit(fullAccessRequest).then(response => {
+  if (response.res === 'ok') {
+    console.log('Full access aproved:');
+  } else if (response.res === 'GFY') {
+    console.error('Full access request failed:', response.error);
+  }
+});
+
+// setup a budget that does not require user approvation (requires user approvation)
+const budgetRequest = newNdebitBudgetRequest({ number: 1, unit: 'week' }, 1000, 'my_pointer_id')
+
+sdk.Ndebit(budgetRequest).then(response => {
+  if (response.res === 'ok') {
+    console.log('Budget aproved:');
+  } else if (response.res === 'GFY') {
+    console.error('Budget request failed:', response.error);
+  }
+});
+
 ```
 
 ---

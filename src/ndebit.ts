@@ -35,19 +35,23 @@ export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Ui
     })
 }
 
-export const newNdebitFullAccessRequest = (): NdebitData => {
-    return {}
-}
-export const newNdebitPaymentRequest = (invoice: string, amount?: number): NdebitData => {
+export const newNdebitFullAccessRequest = (pointer?: string): NdebitData => {
     return {
-        bolt11: invoice,
-        amount_sats: amount
+        pointer: pointer
     }
 }
-export const newNdebitBudgetRequest = (frequency: BudgetFrequency, amount: number): NdebitData => {
+export const newNdebitPaymentRequest = (invoice: string, amount?: number, pointer?: string): NdebitData => {
+    return {
+        bolt11: invoice,
+        amount_sats: amount,
+        pointer: pointer
+    }
+}
+export const newNdebitBudgetRequest = (frequency: BudgetFrequency, amount: number, pointer?: string): NdebitData => {
     return {
         amount_sats: amount,
-        frequency: frequency
+        frequency: frequency,
+        pointer: pointer
     }
 }
 
