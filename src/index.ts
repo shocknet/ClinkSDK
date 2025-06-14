@@ -37,6 +37,7 @@ export class ClinkSDK {
     }
 }
 
-export * from "./noffer.js"
+export * from './nip19Extension.js'
+export * from './noffer.js'
+export * from './nmanage.js'
 export * from "./ndebit.js"
-export * from "./nip19Extension.js"
