@@ -1,5 +1,6 @@
 import { nip44, getPublicKey, finalizeEvent } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
+import { sendRequest } from "./sender"
 const { getConversationKey, decrypt, encrypt } = nip44
 
 export type RecurringDebitTimeUnit = 'day' | 'week' | 'month'
@@ -11,7 +12,7 @@ export type NdebitSuccessPayment = { res: 'ok', preimage: string }
 export type NdebitFailure = { res: 'GFY', error: string, code: number }
 export type NdebitResponse = NdebitSuccess | NdebitSuccessPayment | NdebitFailure
 
-export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], pubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse> => {
+/* export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], pubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse> => {
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, pubKey))
     const event = newNdebitEvent(content, publicKey, pubKey)
@@ -33,7 +34,15 @@ export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Ui
             }
         })
     })
+} */
+
+export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse> => {
+    const publicKey = getPublicKey(privateKey)
+    const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, toPubKey))
+    const event = newNdebitEvent(content, publicKey, toPubKey)
+    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, 21002, timeoutSeconds)
 }
+
 
 export const newNdebitFullAccessRequest = (pointer?: string): NdebitData => {
     return {
