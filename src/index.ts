@@ -3,6 +3,7 @@ import { SimplePool } from "nostr-tools"
 import { SendNofferRequest, NofferData } from "./noffer.js"
 import { NdebitData } from "./ndebit.js"
 import { SendNdebitRequest } from "./ndebit.js"
+import { NmanageRequest, SendNmanageRequest } from "./nmanage.js"
 
 
 
@@ -35,8 +36,13 @@ export class ClinkSDK {
     Ndebit = (data: NdebitData, timeoutSeconds?: number) => {
         SendNdebitRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
     }
+
+    Nmanage = (data: NmanageRequest, timeoutSeconds?: number) => {
+        SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
+    }
 }
 
 export * from "./noffer.js"
 export * from "./ndebit.js"
 export * from "./nip19Extension.js"
+export * from "./nmanage.js"
