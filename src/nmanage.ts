@@ -3,7 +3,7 @@ import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender"
 const { getConversationKey, decrypt, encrypt } = nip44
 
-export type NmanageSuccess = { res: 'ok', resource: 'offer', details: OfferData }
+export type NmanageSuccess = { res: 'ok', resource: 'offer', details?: OfferData | OfferData[] }
 export type NmanageFailure = { res: 'GFY', error: string, code: number }
 export type NmanageResponse = NmanageSuccess | NmanageFailure
 
@@ -22,6 +22,7 @@ export type OfferData = OfferFields & {
 export type NmanageCreateOffer = {
     resource: 'offer',
     action: 'create',
+    pointer?: string,
     offer: {
         fields: OfferFields
     }
@@ -44,7 +45,21 @@ export type NmanageDeleteOffer = {
     }
 }
 
-export type NmanageRequest = NmanageCreateOffer | NmanageUpdateOffer | NmanageDeleteOffer
+export type NmanageGetOffer = {
+    resource: 'offer',
+    action: 'get',
+    offer: {
+        id: string
+    }
+}
+
+export type NmanageListOffers = {
+    resource: 'offer',
+    action: 'list',
+    pointer?: string,
+}
+
+export type NmanageRequest = NmanageCreateOffer | NmanageUpdateOffer | NmanageDeleteOffer | NmanageGetOffer | NmanageListOffers
 
 export const SendNmanageRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NmanageRequest, timeoutSeconds?: number): Promise<NmanageResponse> => {
     const publicKey = getPublicKey(privateKey)
@@ -72,7 +87,7 @@ type CreateOfferData = {
     callback_url?: string,
     payer_data?: string[]
 }
-export const newCreateRequest = (label: string, data: CreateOfferData = {}): NmanageCreateOffer => {
+export const newCreateRequest = (label: string, data: CreateOfferData = {}, pointer?: string): NmanageCreateOffer => {
     const offer: OfferFields = {
         label,
         callback_url: data.callback_url || "",
@@ -82,6 +97,7 @@ export const newCreateRequest = (label: string, data: CreateOfferData = {}): Nma
     return {
         resource: 'offer',
         action: 'create',
+        pointer,
         offer: {
             fields: offer
         }
@@ -111,5 +127,23 @@ export const newDeleteRequest = (offerId: string): NmanageDeleteOffer => {
         offer: {
             id: offerId
         }
+    }
+}
+
+export const newGetRequest = (offerId: string): NmanageGetOffer => {
+    return {
+        resource: 'offer',
+        action: 'get',
+        offer: {
+            id: offerId
+        }
+    }
+}
+
+export const newListRequest = (pointer?: string): NmanageListOffers => {
+    return {
+        resource: 'offer',
+        action: 'list',
+        pointer
     }
 }
