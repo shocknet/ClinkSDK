@@ -1,5 +1,5 @@
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
-import { SimplePool } from "nostr-tools"
+import { SimplePool, getPublicKey, nip19, generateSecretKey } from "nostr-tools"
 import { SendNofferRequest, NofferData } from "./noffer.js"
 import { NdebitData } from "./ndebit.js"
 import { SendNdebitRequest } from "./ndebit.js"
@@ -42,7 +42,8 @@ export class ClinkSDK {
     }
 }
 
-export * from "./noffer.js"
+export * from './nip19Extension.js'
+export * from './noffer.js'
+export * from './nmanage.js'
 export * from "./ndebit.js"
-export * from "./nip19Extension.js"
-export * from "./nmanage.js"
+export { SimplePool, getPublicKey, nip19, generateSecretKey }
