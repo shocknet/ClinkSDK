@@ -1,6 +1,6 @@
 import { nip44, getPublicKey, finalizeEvent, UnsignedEvent } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
-import { sendRequest } from "./sender"
+import { sendRequest } from "./sender.js"
 const { getConversationKey, decrypt, encrypt } = nip44
 
 export type NmanageSuccess = { res: 'ok', resource: 'offer', details?: OfferData | OfferData[] }

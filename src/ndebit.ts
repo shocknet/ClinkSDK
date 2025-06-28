@@ -1,6 +1,6 @@
 import { nip44, getPublicKey, finalizeEvent } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
-import { sendRequest } from "./sender"
+import { sendRequest } from "./sender.js"
 const { getConversationKey, decrypt, encrypt } = nip44
 
 export type RecurringDebitTimeUnit = 'day' | 'week' | 'month'
