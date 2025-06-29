@@ -165,4 +165,4 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 
 ## License
 
-ISC 
+MIT
