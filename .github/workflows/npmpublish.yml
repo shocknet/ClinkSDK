@@ -1,0 +1,54 @@
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+          scope: '@shocknet'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run prepack
+
+      - name: Get package version
+        id: pkg
+        run: echo "version=$(jq -r .version package.json)" >> $GITHUB_OUTPUT
+
+      - name: Check if version is already published
+        id: check
+        run: |
+          if npm view @shocknet/clink-sdk@${{ steps.pkg.outputs.version }} > /dev/null 2>&1; then
+            echo "published=true" >> $GITHUB_OUTPUT
+          else
+            echo "published=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag commit
+        if: steps.check.outputs.published == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag v${{ steps.pkg.outputs.version }}
+          git push origin v${{ steps.pkg.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
