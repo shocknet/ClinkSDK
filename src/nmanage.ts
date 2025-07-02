@@ -3,8 +3,14 @@ import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, decrypt, encrypt } = nip44
 
+type ErrorDelta = { max_delta_ms: number, actual_delta_ms: number }
+type ErrorRange = { min: number, max: number }
+
 export type NmanageSuccess = { res: 'ok', resource: 'offer', details?: OfferData | OfferData[] }
-export type NmanageFailure = { res: 'GFY', error: string, code: number }
+export type NmanageFailure = {
+    res: 'GFY', error: string, code: number,
+    delta?: ErrorDelta, retry_after?: number, field?: string, range?: ErrorRange
+}
 export type NmanageResponse = NmanageSuccess | NmanageFailure
 
 export type OfferFields = {
