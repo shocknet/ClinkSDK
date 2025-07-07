@@ -7,6 +7,7 @@ export const utf8Encoder: TextEncoder = new TextEncoder()
 
 export type Noffer = `noffer1${string}`
 export type Ndebit = `ndebit1${string}`
+export type Nmanage = `nmanage1${string}`
 
 /* const NostrTypeGuard = {
   isNoffer: (value?: string | null): value is Noffer => /^noffer1[a-z\d]+$/.test(value || ''),
@@ -34,6 +35,11 @@ function integerToUint8Array(number: number) {
   return uint8Array
 }
 
+export type ManagePointer = {
+  pubkey: string,
+  relay: string,
+  pointer?: string,
+}
 
 export type OfferPointer = {
   pubkey: string,
@@ -57,6 +63,7 @@ export type DebitPointer = {
 type Prefixes = {
   noffer: OfferPointer
   ndebit: DebitPointer
+  nmanage: ManagePointer
 }
 
 type DecodeValue<Prefix extends keyof Prefixes> = {
@@ -100,6 +107,20 @@ export function decodeBech32(nip19: string): DecodeResult {
       if (!tlv[1]?.[0]) throw new Error('missing TLV 1 for ndebit')
       return {
         type: 'ndebit',
+        data: {
+          pubkey: bytesToHex(tlv[0][0]),
+          relay: utf8Decoder.decode(tlv[1][0]),
+          pointer: tlv[2] ? utf8Decoder.decode(tlv[2][0]) : undefined
+        }
+      }
+    }
+    case 'nmanage': {
+      const tlv = parseTLV(data)
+      if (!tlv[0]?.[0]) throw new Error('missing TLV 0 for nmanage')
+      if (tlv[0][0].length !== 32) throw new Error('TLV 0 should be 32 bytes')
+      if (!tlv[1]?.[0]) throw new Error('missing TLV 1 for nmanage')
+      return {
+        type: 'nmanage',
         data: {
           pubkey: bytesToHex(tlv[0][0]),
           relay: utf8Decoder.decode(tlv[1][0]),
@@ -156,6 +177,19 @@ export const ndebitEncode = (debit: DebitPointer): string => {
   const data = encodeTLV(o)
   const words = bech32.toWords(data)
   return bech32.encode('ndebit', words, 5000)
+}
+
+export const nmanageEncode = (manage: ManagePointer): string => {
+  const o: TLV = {
+    0: [hexToBytes(manage.pubkey)],
+    1: [utf8Encoder.encode(manage.relay)],
+  }
+  if (manage.pointer) {
+    o[2] = [utf8Encoder.encode(manage.pointer)]
+  }
+  const data = encodeTLV(o)
+  const words = bech32.toWords(data)
+  return bech32.encode('nmanage', words, 5000)
 }
 
 function encodeTLV(tlv: TLV): Uint8Array {
