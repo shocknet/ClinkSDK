@@ -1,6 +1,6 @@
 {
     "name": "@shocknet/clink-sdk",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "description": "sdk client for clink",
     "main": "build/index.js",
     "scripts": {
