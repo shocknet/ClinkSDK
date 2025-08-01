@@ -30,15 +30,15 @@ export class ClinkSDK {
     }
 
     Noffer = (data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number) => {
-        SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, onReceipt)
+        return SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, onReceipt)
     }
 
     Ndebit = (data: NdebitData, timeoutSeconds?: number) => {
-        SendNdebitRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
+        return SendNdebitRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
     }
 
     Nmanage = (data: NmanageRequest, timeoutSeconds?: number) => {
-        SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
+        return SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
     }
 }
 
