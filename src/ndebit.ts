@@ -7,10 +7,9 @@ export type RecurringDebitTimeUnit = 'day' | 'week' | 'month'
 export type BudgetFrequency = { number: number, unit: RecurringDebitTimeUnit }
 export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency }
 
-export type NdebitSuccess = { res: 'ok' }
-export type NdebitSuccessPayment = { res: 'ok', preimage: string }
+export type NdebitSuccess = { res: 'ok', preimage?: string }
 export type NdebitFailure = { res: 'GFY', error: string, code: number }
-export type NdebitResponse = NdebitSuccess | NdebitSuccessPayment | NdebitFailure
+export type NdebitResponse = NdebitSuccess | NdebitFailure
 
 /* export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], pubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse> => {
     const publicKey = getPublicKey(privateKey)

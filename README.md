@@ -99,8 +99,12 @@ const sdk = new ClinkSDK({
 const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id')
 
 sdk.Ndebit(simplePaymentRequest).then(response => {
-  if (response.res === 'ok' && 'preimage' in response) {
-    console.log('Payment preimage:', response.preimage);
+  if (response.res === 'ok') {
+    if ('preimage' in response) {
+      console.log('Payment preimage:', response.preimage);
+    } else {
+      console.log('Payment settled internally.');
+    }
   } else if (response.res === 'GFY') {
     console.error('Debit error:', response.error);
   }
