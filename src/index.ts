@@ -1,6 +1,6 @@
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { SimplePool, getPublicKey, nip19, generateSecretKey } from "nostr-tools"
-import { SendNofferRequest, NofferData } from "./noffer.js"
+import { SendNofferRequest, NofferData, NofferReceipt } from "./noffer.js"
 import { NdebitData } from "./ndebit.js"
 import { SendNdebitRequest } from "./ndebit.js"
 import { NmanageRequest, SendNmanageRequest } from "./nmanage.js"
@@ -29,8 +29,8 @@ export class ClinkSDK {
         }
     }
 
-    Noffer = (data: NofferData, timeoutSeconds?: number) => {
-        SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
+    Noffer = (data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number) => {
+        SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, onReceipt)
     }
 
     Ndebit = (data: NdebitData, timeoutSeconds?: number) => {

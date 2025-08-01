@@ -73,8 +73,10 @@ const request: NofferData = {
   amount: 1000, // sats
   payer_data: { name: 'Alice' },
 };
-
-sdk.Noffer(request).then(response => {
+const receiptCallback = (recepit) => {
+  console.log("got receipt", recepit)
+}
+sdk.Noffer(request, receiptCallback).then(response => {
   if ('bolt11' in response) {
     console.log('Invoice:', response.bolt11);
   } else {
