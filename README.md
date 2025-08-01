@@ -70,7 +70,7 @@ const sdk = new ClinkSDK({
 
 const request: NofferData = {
   offer: 'my_offer_id',
-  amount: 1000, // sats
+  amount_sats: 1000, // sats
   payer_data: { name: 'Alice' },
 };
 const receiptCallback = (recepit) => {
