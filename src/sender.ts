@@ -3,10 +3,11 @@ import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 const { getConversationKey, decrypt } = nip44
 
 type Pair = { privateKey: Uint8Array, publicKey: string }
-export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relays: string[], toPub: string, e: UnsignedEvent, kindExpected: number, timeoutSeconds?: number): Promise<T> => {
+export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relays: string[], toPub: string, e: UnsignedEvent, kindExpected: number, timeoutSeconds?: number, moreCb?: (data: any) => void): Promise<T> => {
     const signed = finalizeEvent(e, pair.privateKey)
     await Promise.all(pool.publish(relays, signed))
     return new Promise<T>((res, rej) => {
+        let resolved = false
         let closer: SubCloser = { close: () => { } }
         let timer: NodeJS.Timeout | null = null
         if (timeoutSeconds) {
@@ -18,7 +19,12 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             onevent: async (e) => {
                 if (timer) clearTimeout(timer)
                 const content = decrypt(e.content, getConversationKey(pair.privateKey, toPub))
-                res(JSON.parse(content))
+                if (!resolved) {
+                    resolved = true
+                    res(JSON.parse(content))
+                } else {
+                    moreCb?.(JSON.parse(content))
+                }
             }
         })
     })
