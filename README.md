@@ -71,6 +71,8 @@ const sdk = new ClinkSDK({
 const request: NofferData = {
   offer: 'my_offer_id',
   amount_sats: 1000, // sats
+  description: 'coffee for bob', // optional, max 100 chars
+  expires_in_seconds: 3600, // optional
   payer_data: { name: 'Alice' },
 };
 const receiptCallback = (recepit) => {
@@ -166,8 +168,15 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `decodeBech32(nip19: string): DecodeResult`
 
 ### Types
-- `NofferData`, `NofferResponse`, `NofferReceipt`, `OfferPointer`, `OfferPriceType`
-- `NdebitData`, `NdebitResponse`, `DebitPointer`, `BudgetFrequency`
+- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: any }`
+- **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number } }`
+- **`NofferReceipt`**: `{ preimage?: string }`
+- **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency }`
+- **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number }`
+- **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number }`
+- **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string }`
+- **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`
+- **`BudgetFrequency`**: `{ number: number, unit: 'day' | 'week' | 'month' }`
 
 ---
 
