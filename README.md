@@ -70,7 +70,7 @@ const sdk = new ClinkSDK({
 
 const request: NofferData = {
   offer: 'my_offer_id',
-  amount: 1000, // sats
+  amount_sats: 1000, // sats
   payer_data: { name: 'Alice' },
 };
 const receiptCallback = (recepit) => {
@@ -149,8 +149,16 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `pool`: Optional, pass a custom Nostr pool (defaults to `SimplePool` from nostr-tools).
 
 #### Methods
-- `Noffer(data: NofferData, timeoutSeconds?: number): Promise<NofferResponse>`
-- `Ndebit(data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse>`
+- `Noffer(data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number)`
+  - Sends a `kind: 21001` offer request.
+  - Returns a `Promise<NofferResponse>` that resolves with the invoice or an error.
+  - The optional `onReceipt` callback is triggered if the service sends a payment receipt after the invoice is paid.
+- `Ndebit(data: NdebitData, timeoutSeconds?: number)`
+  - Sends a `kind: 21002` debit request.
+  - Returns a `Promise<NdebitResponse>` that resolves with the payment/budget confirmation or an error.
+- `Nmanage(data: NmanageRequest, timeoutSeconds?: number)`
+  - Sends a `kind: 21003` management request.
+  - Returns a `Promise<NmanageResponse>` that resolves with the result of the management action.
 
 ### Encoding/Decoding
 - `nofferEncode(offer: OfferPointer): string`
@@ -158,7 +166,7 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `decodeBech32(nip19: string): DecodeResult`
 
 ### Types
-- `NofferData`, `NofferResponse`, `OfferPointer`, `OfferPriceType`
+- `NofferData`, `NofferResponse`, `NofferReceipt`, `OfferPointer`, `OfferPriceType`
 - `NdebitData`, `NdebitResponse`, `DebitPointer`, `BudgetFrequency`
 
 ---

@@ -3,9 +3,9 @@ import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, encrypt } = nip44
 
-export type NofferData = { offer: string, amount?: number, zap?: string, payer_data?: any, expires_in_seconds?:number, description?:string }
+export type NofferData = { offer: string, amount_sats?: number, zap?: string, payer_data?: any, expires_in_seconds?:number, description?:string }
 export type NofferSuccess = { bolt11: string }
-export type NofferError = { code: number, error: string, range: { min: number, max: number } }
+export type NofferError = { code: number, error: string, range?: { min: number, max: number } }
 export type NofferResponse = NofferSuccess | NofferError
 export type NofferReceipt = { preimage?: string }
 
