@@ -3,13 +3,16 @@ import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, encrypt } = nip44
 
-export type NofferData = { offer: string, amount_sats?: number, zap?: string, payer_data?: any }
+export type NofferData = { offer: string, amount_sats?: number, zap?: string, payer_data?: any, expires_in_seconds?:number, description?:string }
 export type NofferSuccess = { bolt11: string }
 export type NofferError = { code: number, error: string, range?: { min: number, max: number } }
 export type NofferResponse = NofferSuccess | NofferError
 export type NofferReceipt = { preimage?: string }
 
 export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
+    if (data.description && data.description.length > 100) {
+        throw new Error('Description must be less than 100 characters')
+    }
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, toPubKey))
     const event = newNofferEvent(content, publicKey, toPubKey)
