@@ -1,9 +1,9 @@
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { SimplePool, getPublicKey, nip19, generateSecretKey } from "nostr-tools"
 import { SendNofferRequest, NofferData, NofferReceipt } from "./noffer.js"
-import { NdebitData } from "./ndebit.js"
-import { SendNdebitRequest } from "./ndebit.js"
-import { NmanageRequest, SendNmanageRequest } from "./nmanage.js"
+import { NdebitData, SendNdebitRequest, newNdebitBudgetRequest } from "./ndebit.js"
+import { NmanageRequest, SendNmanageRequest, newListRequest } from "./nmanage.js"
+import { decodeBech32 } from "./nip19Extension.js"
 
 
 
@@ -40,6 +40,11 @@ export class ClinkSDK {
     Nmanage = (data: NmanageRequest, timeoutSeconds?: number) => {
         return SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
     }
+
+    static decodeBech32 = decodeBech32
+    static generateSecretKey = generateSecretKey
+    static newListRequest = newListRequest
+    static newNdebitBudgetRequest = newNdebitBudgetRequest
 }
 
 export * from './nip19Extension.js'
