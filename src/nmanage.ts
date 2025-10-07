@@ -146,6 +146,7 @@ export const newGetRequest = (offerId: string): NmanageGetOffer => {
     }
 }
 
+/** @deprecated Use ClinkSDK.newListRequest instead. Will be removed in v2.0.0. */
 export const newListRequest = (pointer?: string): NmanageListOffers => {
     return {
         resource: 'offer',

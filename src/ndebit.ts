@@ -55,6 +55,8 @@ export const newNdebitPaymentRequest = (invoice: string, amount?: number, pointe
         pointer: pointer
     }
 }
+
+/** @deprecated Use ClinkSDK.newNdebitBudgetRequest instead. Will be removed in v2.0.0. */
 export const newNdebitBudgetRequest = (frequency: BudgetFrequency, amount: number, pointer?: string): NdebitData => {
     return {
         amount_sats: amount,

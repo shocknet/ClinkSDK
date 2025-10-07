@@ -75,7 +75,9 @@ export type DecodeResult = {
   [P in keyof Prefixes]: DecodeValue<P>
 }[keyof Prefixes]
 
+/** @deprecated Use ClinkSDK.decodeBech32 instead. Will be removed in v2.0.0. */
 export function decodeBech32<Prefix extends keyof Prefixes>(nip19: `${Prefix}1${string}`): DecodeValue<Prefix>
+/** @deprecated Use ClinkSDK.decodeBech32 instead. Will be removed in v2.0.0. */
 export function decodeBech32(nip19: string): DecodeResult
 export function decodeBech32(nip19: string): DecodeResult {
   let { prefix, words } = bech32.decode(nip19 as `${string}1${string}`, Bech32MaxSize)
