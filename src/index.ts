@@ -5,6 +5,9 @@ import { NdebitData, SendNdebitRequest, newNdebitBudgetRequest } from "./ndebit.
 import { NmanageRequest, SendNmanageRequest, newListRequest } from "./nmanage.js"
 import { decodeBech32 } from "./nip19Extension.js"
 
+
+
+
 //pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30
 
 export type ClinkSettings = {
@@ -48,8 +51,4 @@ export * from './nip19Extension.js'
 export * from './noffer.js'
 export * from './nmanage.js'
 export * from "./ndebit.js"
-
-/** @deprecated Use ClinkSDK.generateSecretKey instead. Will be removed in v2.0.0. */
-const deprecatedGenerateSecretKey = generateSecretKey;
-
-export { SimplePool, getPublicKey, nip19, deprecatedGenerateSecretKey as generateSecretKey }
+export { SimplePool, getPublicKey, nip19, generateSecretKey }
