@@ -59,24 +59,29 @@ console.log(decoded);
 ### 2. Sending a CLINK Offer Request (Lightning Invoice)
 
 ```ts
-import { ClinkSDK, NofferData } from '@shocknet/clink-sdk';
-import { generatePrivateKey } from 'nostr-tools';
+import { ClinkSDK, NofferData, generateSecretKey, decodeBech32 } from '@shocknet/clink-sdk';
 
+// First, decode the offer string to get the relay and pubkey
+const nofferString = 'noffer1qvqsyqjqxuurvwpcxc6rvvrxxsurqep5vfjk2wf4v33nsenrxumnyvesxfnrswfkvycrwdp3x93xydf5xg6rzce4vv6xgdfh8quxgct9x5erxvspremhxue69uhhgetnwskhyetvv9ujumrfva58gmnfdenjuur4vgqzpccxc30wpf78wf2q78wg3vq008fd8ygtl4qy06gstpye3h5unc47xmee6z';
+const decoded = decodeBech32(nofferString);
+if (decoded.type !== 'noffer') throw new Error('Invalid offer string');
+
+// Create SDK instance with the decoded relay and pubkey
 const sdk = new ClinkSDK({
-  privateKey: generatePrivateKey(), // Uint8Array
-  relays: ['wss://relay.example.com'],
-  toPubKey: '<receiver_pubkey_hex>',
+  privateKey: generateSecretKey(), // Uint8Array
+  relays: [decoded.data.relay],
+  toPubKey: decoded.data.pubkey,
 });
 
 const request: NofferData = {
-  offer: 'my_offer_id',
-  amount_sats: 1000, // sats
+  offer: decoded.data.offer,
+  amount_sats: 1000, // sats (optional for variable/spontaneous offers)
   description: 'coffee for bob', // optional, max 100 chars
   expires_in_seconds: 3600, // optional
-  payer_data: { name: 'Alice' },
+  payer_data: { name: 'Alice' }, // optional
 };
-const receiptCallback = (recepit) => {
-  console.log("got receipt", recepit)
+const receiptCallback = (receipt) => {
+  console.log("got receipt", receipt)
 }
 sdk.Noffer(request, receiptCallback).then(response => {
   if ('bolt11' in response) {
@@ -90,11 +95,10 @@ sdk.Noffer(request, receiptCallback).then(response => {
 ### 3. Sending a CLINK Debit Request
 
 ```ts
-import { ClinkSDK, NdebitData } from '@shocknet/clink-sdk';
-import { generatePrivateKey } from 'nostr-tools';
+import { ClinkSDK, NdebitData, generateSecretKey } from '@shocknet/clink-sdk';
 
 const sdk = new ClinkSDK({
-  privateKey: generatePrivateKey(),
+  privateKey: generateSecretKey(),
   relays: ['wss://relay.example.com'],
   toPubKey: '<wallet_service_pubkey_hex>',
 });
