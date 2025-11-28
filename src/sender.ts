@@ -7,14 +7,6 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
     const signed = finalizeEvent(e, pair.privateKey)
     console.log(`[ClinkSDK] Sending request: kind=${kindExpected}, eventId=${signed.id}, toPub=${toPub}, relays=${relays.join(',')}, timeout=${timeoutSeconds}s`)
     
-    try {
-        await Promise.all(pool.publish(relays, signed))
-        console.log(`[ClinkSDK] Request published to ${relays.length} relays, waiting for response...`)
-    } catch (error) {
-        console.error(`[ClinkSDK] Failed to publish to relays:`, error)
-        throw error
-    }
-    
     return new Promise<T>((res, rej) => {
         let resolved = false
         let closer: SubCloser = { close: () => { } }
@@ -32,6 +24,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         }
         
         try {
+            // Set up subscription BEFORE publishing to avoid race condition
             closer = pool.subscribeMany(relays, [filter], {
                 onevent: async (e) => {
                     console.log(`[ClinkSDK] Received response event: kind=${e.kind}, eventId=${e.id}, from=${e.pubkey}`)
@@ -51,6 +44,16 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                 }
             })
             console.log(`[ClinkSDK] Subscription established for eventId=${signed.id}`)
+            
+            // Publish AFTER subscription is set up to avoid missing the response
+            Promise.all(pool.publish(relays, signed)).then(() => {
+                console.log(`[ClinkSDK] Request published to ${relays.length} relays, waiting for response...`)
+            }).catch((error) => {
+                console.error(`[ClinkSDK] Failed to publish to relays:`, error)
+                if (timer) clearTimeout(timer)
+                closer.close()
+                rej(error)
+            })
         } catch (error) {
             console.error(`[ClinkSDK] Failed to establish subscription:`, error)
             if (timer) clearTimeout(timer)
