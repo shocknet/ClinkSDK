@@ -12,7 +12,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         let closer: SubCloser = { close: () => { } }
         let timer: NodeJS.Timeout | null = null
         
-        const filter = newFilter(pair.publicKey, signed.id, kindExpected)
+        const filter = newFilter(pair.publicKey, signed.id, kindExpected, toPub)
         console.log(`[ClinkSDK] Setting up subscription with filter:`, JSON.stringify(filter, null, 2))
         
         if (timeoutSeconds) {
@@ -29,14 +29,18 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                 onevent: async (e) => {
                     console.log(`[ClinkSDK] Received response event: kind=${e.kind}, eventId=${e.id}, from=${e.pubkey}`)
                     if (timer) clearTimeout(timer)
-                    const content = decrypt(e.content, getConversationKey(pair.privateKey, toPub))
-                    if (!resolved) {
-                        resolved = true
-                        console.log(`[ClinkSDK] Response resolved successfully for eventId=${signed.id}`)
-                        res(JSON.parse(content))
-                    } else {
-                        console.log(`[ClinkSDK] Additional response received for eventId=${signed.id}, calling moreCb`)
-                        moreCb?.(JSON.parse(content))
+                    try {
+                        const content = decrypt(e.content, getConversationKey(pair.privateKey, toPub))
+                        if (!resolved) {
+                            resolved = true
+                            console.log(`[ClinkSDK] Response resolved successfully for eventId=${signed.id}`)
+                            res(JSON.parse(content))
+                        } else {
+                            console.log(`[ClinkSDK] Additional response received for eventId=${signed.id}, calling moreCb`)
+                            moreCb?.(JSON.parse(content))
+                        }
+                    } catch (error) {
+                        console.warn(`[ClinkSDK] Failed to decrypt response from ${e.pubkey} for eventId=${signed.id}:`, error)
                     }
                 },
                 oneose: () => {
@@ -62,9 +66,10 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
     })
 }
 
-export const newFilter = (publicKey: string, eventId: string, kindExpected: number) => ({
+export const newFilter = (publicKey: string, eventId: string, kindExpected: number, author?: string) => ({
     since: Math.floor(Date.now() / 1000) - 1,
     kinds: [kindExpected],
     '#p': [publicKey],
-    '#e': [eventId]
+    '#e': [eventId],
+    ...(author ? { authors: [author] } : {})
 })
