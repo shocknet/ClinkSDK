@@ -17,9 +17,12 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
           scope: '@shocknet'
+
+      - name: Install latest npm
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -33,6 +36,7 @@ jobs:
 
       - name: Check if version is already published
         id: check
+        continue-on-error: true
         run: |
           if npm view @shocknet/clink-sdk@${{ steps.pkg.outputs.version }} > /dev/null 2>&1; then
             echo "published=true" >> $GITHUB_OUTPUT
