@@ -2,6 +2,10 @@
     "name": "@shocknet/clink-sdk",
     "version": "1.5.2",
     "description": "sdk client for clink",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/shocknet/ClinkSDK"
+    },
     "main": "build/index.js",
     "scripts": {
         "clean": "rimraf build",
