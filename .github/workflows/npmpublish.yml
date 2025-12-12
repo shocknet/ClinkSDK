@@ -40,8 +40,6 @@ jobs:
       - name: Publish
         if: steps.check.outputs.published == 'false'
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Tag commit
         if: steps.check.outputs.published == 'false'
