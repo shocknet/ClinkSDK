@@ -7,7 +7,7 @@ export type NofferData = { offer: string, amount_sats?: number, zap?: string, pa
 export type NofferSuccess = { bolt11: string }
 export type NofferError = { code: number, error: string, range?: { min: number, max: number } }
 export type NofferResponse = NofferSuccess | NofferError
-export type NofferReceipt = { preimage?: string }
+export type NofferReceipt = { res: 'ok', preimage?: string }
 
 export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
     if (data.description && data.description.length > 100) {
