@@ -1,5 +1,5 @@
-import { nip44, getPublicKey, finalizeEvent } from "nostr-tools"
-import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
+import { nip44, getPublicKey } from "nostr-tools"
+import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, encrypt } = nip44
 
@@ -7,7 +7,7 @@ export type NofferData = { offer: string, amount_sats?: number, zap?: string, pa
 export type NofferSuccess = { bolt11: string }
 export type NofferError = { code: number, error: string, range?: { min: number, max: number } }
 export type NofferResponse = NofferSuccess | NofferError
-export type NofferReceipt = { res: 'ok', preimage?: string }
+export type NofferReceipt = { res: 'ok' }
 
 export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
     if (data.description && data.description.length > 100) {
