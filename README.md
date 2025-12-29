@@ -92,6 +92,7 @@ sdk.Noffer(request, receiptCallback).then(response => {
     console.error('Error:', response.error);
   }
 });
+```
 
 ### 3. Sending a CLINK Debit Request
 
