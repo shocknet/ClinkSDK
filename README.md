@@ -80,9 +80,11 @@ const request: NofferData = {
   expires_in_seconds: 3600, // optional
   payer_data: { name: 'Alice' }, // optional
 };
+
+// Optional: Pass a receipt callback to be notified when the invoice is paid
 const receiptCallback = (receipt) => {
-  console.log("got receipt", receipt)
-}
+  console.log("got receipt", receipt); // receipt will be { res: 'ok' }
+};
 sdk.Noffer(request, receiptCallback).then(response => {
   if ('bolt11' in response) {
     console.log('Invoice:', response.bolt11);
@@ -90,7 +92,6 @@ sdk.Noffer(request, receiptCallback).then(response => {
     console.error('Error:', response.error);
   }
 });
-```
 
 ### 3. Sending a CLINK Debit Request
 
@@ -158,13 +159,14 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `Noffer(data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number)`
   - Sends a `kind: 21001` offer request.
   - Returns a `Promise<NofferResponse>` that resolves with the invoice or an error.
-  - The optional `onReceipt` callback is triggered if the service sends a payment receipt after the invoice is paid.
+  - The optional `onReceipt` callback is triggered when the invoice is paid. **You must pass the callback as a parameter**—simply defining it is not enough.
 - `Ndebit(data: NdebitData, timeoutSeconds?: number)`
   - Sends a `kind: 21002` debit request.
   - Returns a `Promise<NdebitResponse>` that resolves with the payment/budget confirmation or an error.
 - `Nmanage(data: NmanageRequest, timeoutSeconds?: number)`
   - Sends a `kind: 21003` management request.
   - Returns a `Promise<NmanageResponse>` that resolves with the result of the management action.
+
 
 ### Encoding/Decoding
 - `nofferEncode(offer: OfferPointer): string`
@@ -174,7 +176,7 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 ### Types
 - **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: any }`
 - **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number } }`
-- **`NofferReceipt`**: `{ preimage?: string }`
+- **`NofferReceipt`**: `{ res: 'ok' }` - The receipt object sent when an invoice is paid
 - **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency }`
 - **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number }`
 - **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number }`
