@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run prepack
+        run: npm run prepare
 
       - name: Get package version
         id: pkg

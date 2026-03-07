@@ -9,7 +9,7 @@
     "main": "build/index.js",
     "scripts": {
         "clean": "rimraf build",
-        "prepack": "npm run clean && tsc",
+        "prepare": "npm run clean && tsc",
         "test": "echo \"Error: no test specified\" && exit 1",
         "start": "npm run prepack && node build/index.js"
     },
@@ -42,11 +42,11 @@
     "dependencies": {
         "@noble/hashes": "^1.8.0",
         "@scure/base": "^1.2.5",
-        "nostr-tools": "2.15.1",
-        "rimraf": "^6.0.1",
-        "typescript": "^5.8.3"
+        "nostr-tools": "2.15.1"
     },
     "devDependencies": {
-        "@types/node": "^22.15.2"
+        "@types/node": "^22.15.2",
+        "rimraf": "^6.0.1",
+        "typescript": "^5.8.3"
     }
 }
