@@ -5,7 +5,7 @@ const { getConversationKey, decrypt, encrypt } = nip44
 
 export type RecurringDebitTimeUnit = 'day' | 'week' | 'month'
 export type BudgetFrequency = { number: number, unit: RecurringDebitTimeUnit }
-export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency }
+export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string }
 
 export type NdebitSuccess = { res: 'ok', preimage?: string }
 export type NdebitFailure = { res: 'GFY', error: string, code: number }
