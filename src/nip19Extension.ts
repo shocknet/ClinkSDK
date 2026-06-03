@@ -58,6 +58,7 @@ export type DebitPointer = {
   pubkey: string,
   relay: string,
   pointer?: string,
+  k1?: string,
 }
 
 type Prefixes = {
@@ -105,12 +106,14 @@ export function decodeBech32(nip19: string): DecodeResult {
       if (!tlv[0]?.[0]) throw new Error('missing TLV 0 for ndebit')
       if (tlv[0][0].length !== 32) throw new Error('TLV 0 should be 32 bytes')
       if (!tlv[1]?.[0]) throw new Error('missing TLV 1 for ndebit')
+      if (tlv[3] && tlv[3][0].length !== 32) throw new Error('TLV 3 should be 32 bytes if present')
       return {
         type: 'ndebit',
         data: {
           pubkey: bytesToHex(tlv[0][0]),
           relay: utf8Decoder.decode(tlv[1][0]),
-          pointer: tlv[2] ? utf8Decoder.decode(tlv[2][0]) : undefined
+          pointer: tlv[2] ? utf8Decoder.decode(tlv[2][0]) : undefined,
+          k1: tlv[3] ? bytesToHex(tlv[3][0]) : undefined
         }
       }
     }
@@ -173,6 +176,11 @@ export const ndebitEncode = (debit: DebitPointer): string => {
   }
   if (debit.pointer) {
     o[2] = [utf8Encoder.encode(debit.pointer)]
+  }
+  if (debit.k1) {
+    const k1 = hexToBytes(debit.k1)
+    if (k1.length !== 32) throw new Error('raw K1 buffer should be 32 bytes')
+    o[3] = [k1]
   }
   const data = encodeTLV(o)
   const words = bech32.toWords(data)
