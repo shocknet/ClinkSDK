@@ -1,3 +1,4 @@
+import { randomBytes, bytesToHex } from '@noble/hashes/utils'
 import { nip44, getPublicKey, finalizeEvent } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
@@ -7,13 +8,25 @@ export type RecurringDebitTimeUnit = 'day' | 'week' | 'month'
 export type BudgetFrequency = { number: number, unit: RecurringDebitTimeUnit }
 export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string }
 
+const K1_HEX_RE = /^[0-9a-f]{64}$/
+
+export const validateK1 = (k1: unknown): string => {
+    if (typeof k1 !== 'string' || !K1_HEX_RE.test(k1)) {
+        throw new Error('k1 must be 64 lowercase hex characters')
+    }
+    return k1
+}
+
+/** 32 random bytes as lowercase hex — for minting session ndebit TLV `3`. */
+export const generateK1 = (): string => bytesToHex(randomBytes(32))
+
 export const validateNdebitData = (data: unknown): NdebitData => {
     if (typeof data !== 'object' || data === null) throw new Error('data must be an object')
     if ('pointer' in data && typeof data.pointer !== 'string') throw new Error('pointer must be a string if present')
     if ('amount_sats' in data && typeof data.amount_sats !== 'number') throw new Error('amount_sats must be a number if present')
     if ('bolt11' in data && typeof data.bolt11 !== 'string') throw new Error('bolt11 must be a string if present')
     if ('frequency' in data) validateBudgetFrequency(data.frequency)
-    if ('k1' in data && typeof data.k1 !== 'string') throw new Error('k1 must be a string if present')
+    if ('k1' in data) validateK1(data.k1)
     return data as NdebitData
 }
 
@@ -67,12 +80,14 @@ export const newNdebitFullAccessRequest = (pointer?: string): NdebitData => {
         pointer: pointer
     }
 }
-export const newNdebitPaymentRequest = (invoice: string, amount?: number, pointer?: string): NdebitData => {
-    return {
+export const newNdebitPaymentRequest = (invoice: string, amount?: number, pointer?: string, k1?: string): NdebitData => {
+    const req: NdebitData = {
         bolt11: invoice,
         amount_sats: amount,
-        pointer: pointer
+        pointer: pointer,
     }
+    if (k1 !== undefined) req.k1 = validateK1(k1)
+    return req
 }
 
 export const newNdebitBudgetRequest = (frequency: BudgetFrequency, amount: number, pointer?: string): NdebitData => {

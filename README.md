@@ -16,10 +16,10 @@
 
 ## Features
 
-- Encode/decode CLINK Static Offers (`noffer1...`) and Debits (`ndebit1...`) per the spec.
+- Encode/decode CLINK Static Offers (`noffer1...`) and Debits (`ndebit1...`) per the spec, including session ndebits with `k1`.
 - Send and receive CLINK payment requests (kind 21001) and debit requests (kind 21002) over Nostr.
 - NIP-44 encrypted payloads for privacy and security.
-- TypeScript types for all protocol payloads and responses.
+- TypeScript types and runtime validators for protocol payloads and responses.
 - Simple, high-level API for wallet and service integration.
 
 ---
@@ -54,6 +54,16 @@ const noffer = nofferEncode({
 const decoded = decodeBech32(noffer);
 console.log(decoded);
 // { type: 'noffer', data: { pubkey, relay, offer, priceType, price } }
+
+// Encode a session ndebit (e.g. ATM cash-in QR)
+import { generateK1 } from '@shocknet/clink-sdk';
+
+const sessionNdebit = ndebitEncode({
+  pubkey: '<node_service_pubkey_hex>',
+  relay: 'wss://relay.example.com',
+  pointer: '<app_user_pointer>',
+  k1: generateK1(),
+});
 ```
 
 ### 2. Sending a CLINK Offer Request (Lightning Invoice)
@@ -97,15 +107,39 @@ sdk.Noffer(request, receiptCallback).then(response => {
 ### 3. Sending a CLINK Debit Request
 
 ```ts
-import { ClinkSDK, NdebitData, generateSecretKey } from '@shocknet/clink-sdk';
+import {
+  ClinkSDK,
+  decodeBech32,
+  generateSecretKey,
+  newNdebitPaymentRequest,
+  newNdebitFullAccessRequest,
+  newNdebitBudgetRequest,
+} from '@shocknet/clink-sdk';
 
+// Session flow: scan ndebit QR, pay with matching k1
+const scanned = decodeBech32('ndebit1...');
+if (scanned.type === 'ndebit') {
+  const sdk = new ClinkSDK({
+    privateKey: generateSecretKey(),
+    relays: [scanned.data.relay],
+    toPubKey: scanned.data.pubkey,
+  });
+  const sessionPayment = newNdebitPaymentRequest(
+    '<BOLT11_invoice_string>',
+    5000,
+    scanned.data.pointer,
+    scanned.data.k1,
+  );
+  sdk.Ndebit(sessionPayment).then(/* ... */);
+}
+
+// Authorization flow: static pointer
 const sdk = new ClinkSDK({
   privateKey: generateSecretKey(),
   relays: ['wss://relay.example.com'],
-  toPubKey: '<wallet_service_pubkey_hex>',
+  toPubKey: '<node_service_pubkey_hex>',
 });
 
-// Request the service to pay an invoice
 const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id')
 
 sdk.Ndebit(simplePaymentRequest).then(response => {
@@ -173,15 +207,20 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `nofferEncode(offer: OfferPointer): string`
 - `ndebitEncode(debit: DebitPointer): string`
 - `decodeBech32(nip19: string): DecodeResult`
+- `generateK1(): string` — 32-byte session identifier as lowercase hex (for session ndebit TLV `3`)
+
+### Validators
+- `validateNofferData`, `validateNdebitData`, `validateK1`, `validateBudgetFrequency`
+- `validateNmanageRequest` and per-action nmanage validators
 
 ### Types
-- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: any }`
+- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: Record<string, string> }`
 - **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number } }`
 - **`NofferReceipt`**: `{ res: 'ok' }` - The receipt object sent when an invoice is paid
-- **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency }`
+- **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string }`
 - **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number }`
 - **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number }`
-- **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string }`
+- **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string, k1?: string }`
 - **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`
 - **`BudgetFrequency`**: `{ number: number, unit: 'day' | 'week' | 'month' }`
 
