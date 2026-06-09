@@ -27,6 +27,7 @@ const connectRelay = async (pair: Pair, relayUrl: string, onReady: () => void) =
             onReady()
         },
         onevent: (e) => {
+            console.log("received noffer request", e)
             const convKey = nip44.getConversationKey(pair.privateKey, e.pubkey)
             const content = nip44.decrypt(e.content, convKey)
             const data = JSON.parse(content) as NofferData
