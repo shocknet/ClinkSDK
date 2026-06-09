@@ -1,0 +1,17 @@
+name: End 2 End test
+on:
+  push:
+    paths-ignore:
+      - 'scripts/**'
+      - 'README.md'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: list files
+        run: ls -la
+      - name: Install dependencies
+        run: npm install 
+      - name: Run tests
+        run: npm test

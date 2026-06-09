@@ -10,7 +10,7 @@
     "scripts": {
         "clean": "rimraf build",
         "prepack": "npm run clean && tsc",
-        "test": "echo \"Error: no test specified\" && exit 1",
+        "test": "npm run prepack && node build/e2eTest.js",
         "start": "npm run prepack && node build/index.js"
     },
     "type": "module",
