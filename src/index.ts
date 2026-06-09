@@ -29,6 +29,10 @@ export class ClinkSDK {
         }
     }
 
+    Stop = () => {
+        this.pool.destroy()
+    }
+
     Noffer = (data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number) => {
         return SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, onReceipt)
     }

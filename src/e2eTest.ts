@@ -121,6 +121,7 @@ class E2ETest {
         await this.mockService.Start()
         await this.TestNoffer()
         this.mockService.Stop()
+        this.sdk.Stop()
     }
     TestNoffer = async () => {
         console.log("testing noffer")
