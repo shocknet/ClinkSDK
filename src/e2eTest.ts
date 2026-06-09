@@ -7,7 +7,7 @@ const MOCK_OFFER_INVOICE = "MOCK_OFFER_INVOICE"
 type Pair = { privateKey: Uint8Array, publicKey: string }
 
 const connectRelay = async (pair: Pair, relayUrl: string, onReady: () => void) => {
-    console.log("connecting to relay", relayUrl)
+    console.log("connecting to relay", relayUrl, "for ", pair.publicKey)
     const { privateKey, publicKey } = pair
     const kind = 21001
     const relay = await Relay.connect(relayUrl)
@@ -18,7 +18,7 @@ const connectRelay = async (pair: Pair, relayUrl: string, onReady: () => void) =
         console.log("relay disconnected")
     }
     const filter: Filter = {
-        since: Math.ceil(Date.now() / 1000),
+        since: Math.ceil(Date.now() / 1000) - 10,
         kinds: [kind],
         '#p': [publicKey],
     }
