@@ -32,13 +32,14 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                     const content = decrypt(e.content, getConversationKey(pair.privateKey, toPub))
                     if (!resolved) {
                         resolved = true
-                        console.log(`[ClinkSDK] Response resolved successfully for eventId=${signed.id}`)
+                        const closing = !moreCb ? " and closing subscription" : ""
+                        console.log(`[ClinkSDK] Response resolved successfully for eventId=${signed.id} ${closing}`)
                         res(JSON.parse(content))
                         if (!moreCb) {
                             closer.close()
                         }
                     } else {
-                        console.log(`[ClinkSDK] Additional response received for eventId=${signed.id}, calling moreCb`)
+                        console.log(`[ClinkSDK] Additional response received for eventId=${signed.id}, calling moreCb and closing subscription`)
                         moreCb?.(JSON.parse(content))
                         closer.close()
                     }
