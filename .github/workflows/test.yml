@@ -7,11 +7,17 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        nostr-tools-version: ['2.15.1', '2.16.2', 'latest']
     steps:
       - uses: actions/checkout@v2
-      - name: list files
-        run: ls -la
       - name: Install dependencies
-        run: npm install 
+        run: npm install
+      - name: Install nostr-tools@${{ matrix.nostr-tools-version }}
+        run: npm install nostr-tools@${{ matrix.nostr-tools-version }}
+      - name: List installed nostr-tools version
+        run: npm list nostr-tools
       - name: Run tests
         run: npm test
