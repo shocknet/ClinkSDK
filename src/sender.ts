@@ -1,4 +1,4 @@
-import { nip44, finalizeEvent, UnsignedEvent } from "nostr-tools"
+import { nip44, finalizeEvent, UnsignedEvent, Filter } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 const { getConversationKey, decrypt } = nip44
 
@@ -24,8 +24,9 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         }
 
         try {
+
             // Set up subscription BEFORE publishing to avoid race condition
-            closer = pool.subscribeMany(relays, [filter], {
+            closer = pool.subscribeMap(relays.map(url => ({ url, filter })), {
                 onevent: async (e) => {
                     console.log(`[ClinkSDK] Received response event: kind=${e.kind}, eventId=${e.id}, from=${e.pubkey}`)
                     if (timer) clearTimeout(timer)
@@ -67,7 +68,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
     })
 }
 
-export const newFilter = (publicKey: string, eventId: string, kindExpected: number) => ({
+export const newFilter = (publicKey: string, eventId: string, kindExpected: number): Filter => ({
     since: Math.floor(Date.now() / 1000) - 1,
     kinds: [kindExpected],
     '#p': [publicKey],
