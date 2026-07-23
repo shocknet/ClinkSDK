@@ -1,10 +1,11 @@
 {
-  "description": "Interop vectors for CLINK language ports. A correct implementation MUST round-trip these. Do not invent NIP-44 or TLV encodings — match @shocknet/clink-sdk (and the NIP-44 version on the wire).",
+  "description": "Interop vectors for CLINK language ports. A correct implementation MUST round-trip these. Do not invent NIP-44 or NIP-19-style TLV/bech32 — match @shocknet/clink-sdk (and the NIP-44 version on the wire).",
   "tlv": {
-    "layout": "type (1 byte) | length (1 byte) | value (length bytes)",
+    "layout": "type (1 byte) | length (1 byte) | value (length bytes) — same NIP-19 TLV layout as nprofile/etc.; CLINK defines HRPs and tag meanings only",
     "notes": [
       "Length is a single byte (0–255), NOT 2-byte big-endian.",
-      "Tag numbers and meanings are fixed — do not swap pubkey/relay."
+      "Tag numbers and meanings are fixed — do not swap pubkey/relay; do not omit required tags.",
+      "Tag 0 (pubkey) is 32 raw bytes, not a UTF-8 hex string."
     ],
     "noffer": {
       "0": "pubkey (32 bytes raw)",

@@ -52,7 +52,7 @@ npm install @shocknet/clink-sdk
 yarn add @shocknet/clink-sdk
 ```
 
-> ⚠️ **Important:** Do not install `nostr-tools` yourself. This SDK pins a compatible version; a second copy often causes decrypt failures and missed responses. Import helpers like `SimplePool`, `nip44`, and `finalizeEvent` from `@shocknet/clink-sdk`. See the [Troubleshooting Guide](docs/troubleshooting.md) for details.
+> ⚠️ **Important:** Do not install `nostr-tools` yourself. This SDK pins a compatible version; a second copy often causes decrypt failures and missed responses. Import helpers like `SimplePool`, `nip44`, and `finalizeEvent` from `@shocknet/clink-sdk`. Details: [Troubleshooting Guide](docs/troubleshooting.md).
 
 ---
 
@@ -230,12 +230,8 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 
 ## Troubleshooting & Language Porting
 
-For detailed guidance on:
-- Resolving `nostr-tools` dependency conflicts
-- Diagnosing silent timeouts or "no response" issues
-- Porting the CLINK protocol and NIP-44 v2 encryption to other languages (C#, Go, etc.) with test vectors
-
-Please refer to our [Troubleshooting & Interoperability Guide](docs/troubleshooting.md).
+- `nostr-tools` conflicts, timeouts, and NIP-44 / NIP-19 ports: [docs/troubleshooting.md](docs/troubleshooting.md)
+- Interop vectors for language ports: [test-vectors/interop.json](test-vectors/interop.json)
 
 ---
 
