@@ -119,7 +119,13 @@ sdk.Noffer(request, receiptCallback).then(response => {
 ### 3. Sending a CLINK Debit Request
 
 ```ts
-import { ClinkSDK, NdebitData, generateSecretKey } from '@shocknet/clink-sdk';
+import {
+  ClinkSDK,
+  generateSecretKey,
+  newNdebitPaymentRequest,
+  newNdebitFullAccessRequest,
+  newNdebitBudgetRequest,
+} from '@shocknet/clink-sdk';
 
 const sdk = new ClinkSDK({
   privateKey: generateSecretKey(),
@@ -128,7 +134,7 @@ const sdk = new ClinkSDK({
 });
 
 // Request the service to pay an invoice
-const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id')
+const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id');
 
 sdk.Ndebit(simplePaymentRequest).then(response => {
   if (response.res === 'ok') {
@@ -143,27 +149,26 @@ sdk.Ndebit(simplePaymentRequest).then(response => {
 });
 
 // Request whitelisting for future payment requests
-const fullAccessRequest = newNdebitFullAccessRequest('my_pointer_id')
+const fullAccessRequest = newNdebitFullAccessRequest('my_pointer_id');
 
 sdk.Ndebit(fullAccessRequest).then(response => {
   if (response.res === 'ok') {
-    console.log('Full access aproved:');
+    console.log('Full access approved:');
   } else if (response.res === 'GFY') {
     console.error('Full access request failed:', response.error);
   }
 });
 
 // Request a budget
-const budgetRequest = newNdebitBudgetRequest({ number: 1, unit: 'week' }, 1000, 'my_pointer_id')
+const budgetRequest = newNdebitBudgetRequest({ number: 1, unit: 'week' }, 1000, 'my_pointer_id');
 
 sdk.Ndebit(budgetRequest).then(response => {
   if (response.res === 'ok') {
-    console.log('Budget aproved:');
+    console.log('Budget approved:');
   } else if (response.res === 'GFY') {
     console.error('Budget request failed:', response.error);
   }
 });
-
 ```
 
 ---
