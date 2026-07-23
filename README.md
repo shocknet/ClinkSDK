@@ -4,6 +4,26 @@
 
 ---
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [1. Encoding/Decoding Offers and Debits](#1-encodingdecoding-offers-and-debits)
+  - [2. Sending a CLINK Offer Request (Lightning Invoice)](#2-sending-a-clink-offer-request-lightning-invoice)
+  - [3. Sending a CLINK Debit Request](#3-sending-a-clink-debit-request)
+- [API Reference](#api-reference)
+  - [ClinkSDK](#clinksdk)
+  - [Encoding/Decoding](#encodingdecoding)
+  - [Nostr Helpers (re-exported)](#nostr-helpers-re-exported)
+  - [Types](#types)
+- [Troubleshooting & Language Porting](#troubleshooting--language-porting)
+- [Protocol](#protocol)
+- [License](#license)
+
+---
+
 ## Overview
 
 `@shocknet/clink-sdk` provides a simple, robust interface for working with [CLINK](https://github.com/shocknet/CLINK/) (`noffer1...` and `ndebit1...`) on Nostr. It enables applications and wallets to create, encode, decode, send, and receive CLINK payment requests and authorizations using Nostr relays, with full support for NIP-44 encryption and the CLINK protocol.
@@ -31,6 +51,8 @@ npm install @shocknet/clink-sdk
 # or
 yarn add @shocknet/clink-sdk
 ```
+
+> ⚠️ **Important:** Do not install `nostr-tools` yourself. This SDK pins a compatible version; a second copy often causes decrypt failures and missed responses. Import helpers like `SimplePool`, `nip44`, and `finalizeEvent` from `@shocknet/clink-sdk`. See the [Troubleshooting Guide](docs/troubleshooting.md) for details.
 
 ---
 
@@ -154,7 +176,7 @@ sdk.Ndebit(budgetRequest).then(response => {
 new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 ```
 - `settings`: `{ privateKey: Uint8Array, relays: string[], toPubKey: string, defaultTimeoutSeconds?: number }`
-- `pool`: Optional, pass a custom Nostr pool (defaults to `SimplePool` from nostr-tools).
+- `pool`: Optional custom Nostr pool (defaults to `SimplePool` from this package’s pinned `nostr-tools`). If you pass one, build it with `SimplePool` imported from `@shocknet/clink-sdk`.
 
 #### Methods
 - `Noffer(data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number)`
@@ -172,7 +194,24 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 ### Encoding/Decoding
 - `nofferEncode(offer: OfferPointer): string`
 - `ndebitEncode(debit: DebitPointer): string`
+- `nmanageEncode(manage: ManagePointer): string`
 - `decodeBech32(nip19: string): DecodeResult`
+
+### Nostr helpers (re-exported)
+
+Pinned by this package — import these from `@shocknet/clink-sdk`, not from a separate `nostr-tools` install:
+
+| Export | Kind | Use |
+|--------|------|-----|
+| `SimplePool` | value | Default relay pool; use this if you pass a custom `pool` |
+| `getPublicKey` | value | Derive pubkey from secret key |
+| `generateSecretKey` | value | Create a new secret key |
+| `nip19` | value | Bech32 encode/decode (`npub` / `nsec` / …) |
+| `finalizeEvent` | value | Sign an unsigned event |
+| `nip44` | value | Encrypt/decrypt CLINK payloads (`encrypt`, `decrypt`, `getConversationKey`) |
+| `verifyEvent` | value | Verify event signatures (e.g. NIP-98) |
+| `AbstractSimplePool` | type | Type for a custom `pool` argument |
+| `UnsignedEvent` | type | Event shape before `finalizeEvent` |
 
 ### Types
 - **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: any }`
@@ -184,6 +223,19 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string }`
 - **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`
 - **`BudgetFrequency`**: `{ number: number, unit: 'day' | 'week' | 'month' }`
+- **`ClinkSettings`**: `{ privateKey: Uint8Array, relays: string[], toPubKey: string, defaultTimeoutSeconds?: number }`
+- **`AbstractSimplePool`**, **`UnsignedEvent`**: see Nostr helpers above
+
+---
+
+## Troubleshooting & Language Porting
+
+For detailed guidance on:
+- Resolving `nostr-tools` dependency conflicts
+- Diagnosing silent timeouts or "no response" issues
+- Porting the CLINK protocol and NIP-44 v2 encryption to other languages (C#, Go, etc.) with test vectors
+
+Please refer to our [Troubleshooting & Interoperability Guide](docs/troubleshooting.md).
 
 ---
 

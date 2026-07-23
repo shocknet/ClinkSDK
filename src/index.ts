@@ -1,12 +1,9 @@
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
-import { SimplePool, getPublicKey, nip19, generateSecretKey } from "nostr-tools"
+import { SimplePool, getPublicKey, nip19, generateSecretKey, finalizeEvent, nip44, verifyEvent, type UnsignedEvent } from "nostr-tools"
 import { SendNofferRequest, NofferData, NofferReceipt } from "./noffer.js"
 import { NdebitData, SendNdebitRequest, newNdebitBudgetRequest } from "./ndebit.js"
 import { NmanageRequest, SendNmanageRequest, newListRequest } from "./nmanage.js"
 import { decodeBech32 } from "./nip19Extension.js"
-
-
-
 
 //pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30
 
@@ -51,4 +48,6 @@ export * from './nip19Extension.js'
 export * from './noffer.js'
 export * from './nmanage.js'
 export * from "./ndebit.js"
-export { SimplePool, getPublicKey, nip19, generateSecretKey }
+/** Re-exported from the SDK's pinned nostr-tools — import these here, do not install nostr-tools yourself. */
+export { SimplePool, getPublicKey, nip19, generateSecretKey, finalizeEvent, nip44, verifyEvent }
+export type { AbstractSimplePool, UnsignedEvent }
