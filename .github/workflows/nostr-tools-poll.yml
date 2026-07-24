@@ -1,0 +1,131 @@
+name: nostr-tools poll
+
+on:
+  schedule:
+    # Daily UTC — early-exits when registry version matches pin
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      nostr_tools_version:
+        description: Force a specific nostr-tools version (skip compare)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    outputs:
+      newer: ${{ steps.cmp.outputs.newer }}
+      candidate: ${{ steps.cmp.outputs.candidate }}
+      pinned: ${{ steps.cmp.outputs.pinned }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - id: cmp
+        name: Compare registry vs pin
+        env:
+          FORCED_VERSION: ${{ inputs.nostr_tools_version }}
+        run: |
+          set -euo pipefail
+          PINNED=$(node -p "require('./package.json').dependencies['nostr-tools']")
+          # Strip any semver range prefix if present (we pin exact)
+          PINNED=${PINNED#=}
+          if [ -n "$FORCED_VERSION" ]; then
+            CANDIDATE="$FORCED_VERSION"
+          else
+            CANDIDATE=$(npm view nostr-tools version)
+          fi
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
+          if [ "$CANDIDATE" = "$PINNED" ]; then
+            echo "newer=false" >> "$GITHUB_OUTPUT"
+            echo "nostr-tools@$PINNED is current; exiting early"
+          else
+            echo "newer=true" >> "$GITHUB_OUTPUT"
+            echo "registry has nostr-tools@$CANDIDATE (pin $PINNED)"
+          fi
+
+  test-candidate:
+    needs: compare
+    if: needs.compare.outputs.newer == 'true'
+    uses: ./.github/workflows/test.yml
+    with:
+      nostr_tools_version: ${{ needs.compare.outputs.candidate }}
+      run_relay: true
+
+  conclude:
+    needs: [compare, test-candidate]
+    if: always() && needs.compare.outputs.newer == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Open bump PR or tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE: ${{ needs.compare.outputs.candidate }}
+          PINNED: ${{ needs.compare.outputs.pinned }}
+          TEST_RESULT: ${{ needs.test-candidate.result }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/bump-nostr-tools-${CANDIDATE}"
+          TITLE="chore: bump nostr-tools to ${CANDIDATE}"
+          ISSUE_TITLE="nostr-tools@${CANDIDATE} fails ClinkSDK compat"
+
+          if [ "$TEST_RESULT" = "success" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            # Refresh branch from main
+            git fetch origin main
+            git checkout -B "$BRANCH" origin/main
+
+            npm install "nostr-tools@${CANDIDATE}" --save-exact
+            git add package.json package-lock.json
+            if git diff --cached --quiet; then
+              echo "no changes to commit"
+            else
+              git commit -m "$TITLE"
+              git push -u origin "$BRANCH" --force-with-lease
+            fi
+
+            if gh pr list --head "$BRANCH" --json number --jq 'length' | grep -q '^0$'; then
+              gh pr create --title "$TITLE" --body "Automated bump after green compat suite against \`nostr-tools@${CANDIDATE}\` (was \`${PINNED}\`)."
+            else
+              echo "PR already open for $BRANCH"
+            fi
+
+            # Close tracking issue if present
+            EXISTING=$(gh issue list --search "$ISSUE_TITLE in:title" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$EXISTING" ]; then
+              gh issue close "$EXISTING" --comment "Compat suite passed for nostr-tools@${CANDIDATE}; bump PR opened/updated."
+            fi
+          else
+            BODY=$(cat <<EOF
+          Automated poll found \`nostr-tools@${CANDIDATE}\` (pin \`${PINNED}\`) but the ClinkSDK compat suite failed (\`test-candidate\` result: \`${TEST_RESULT}\`).
+
+          Inspect the [poll workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          Do not bump until green.
+          EOF
+          )
+            EXISTING=$(gh issue list --search "$ISSUE_TITLE in:title" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --body "$BODY"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body "$BODY"
+            fi
+            exit 1
+          fi

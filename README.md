@@ -1,5 +1,7 @@
 # @shocknet/clink-sdk
 
+[![CI](https://github.com/shocknet/ClinkSDK/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/shocknet/ClinkSDK/actions/workflows/test.yml)
+
 **A TypeScript/JavaScript SDK for the CLINK protocol — Nostr-native static Lightning payment offers and debits.**
 
 ---
