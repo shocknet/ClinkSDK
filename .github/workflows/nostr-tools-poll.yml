@@ -2,8 +2,8 @@ name: nostr-tools poll
 
 on:
   schedule:
-    # Daily UTC — early-exits when registry version matches pin
-    - cron: '17 6 * * *'
+    # Weekly UTC (Monday) — early-exits when registry version matches pin
+    - cron: '17 6 * * 1'
   workflow_dispatch:
     inputs:
       nostr_tools_version:
