@@ -164,6 +164,7 @@ const sdk = new ClinkSDK({
 
 // Request the service to pay an invoice
 const simplePaymentRequest = newNdebitPaymentRequest('<BOLT11_invoice_string>', 5000, 'my_pointer_id');
+// Optional: session k1 and/or description — newNdebitPaymentRequest(invoice, amount, pointer, k1?, description?)
 
 sdk.Ndebit(simplePaymentRequest).then(response => {
   if (response.res === 'ok') {
@@ -233,6 +234,10 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `nmanageEncode(manage: ManagePointer): string`
 - `decodeBech32(nip19: string): DecodeResult`
 - `generateK1(): string` — 32-byte session identifier as lowercase hex (ndebit TLV `3`)
+- `validateK1(k1: unknown): string` — throws unless `k1` is 64 lowercase hex chars; returns it unchanged
+
+### Debug
+- `setDebug(enabled: boolean)` — when `true`, logs relay subscribe/publish/response lifecycle to the console (default `false`)
 
 ### Nostr helpers (re-exported)
 

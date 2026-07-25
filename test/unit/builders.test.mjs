@@ -31,6 +31,18 @@ describe('request builders', () => {
     assert.throws(() => newNdebitPaymentRequest('lnbc1test', 5000, 'ptr', 'not-a-k1'))
   })
 
+  it('builds ndebit payment request with description', () => {
+    assert.deepEqual(newNdebitPaymentRequest('lnbc1test', 5000, 'ptr', undefined, 'coffee'), {
+      bolt11: 'lnbc1test',
+      amount_sats: 5000,
+      pointer: 'ptr',
+      description: 'coffee',
+    })
+    assert.throws(() =>
+      newNdebitPaymentRequest('lnbc1test', 5000, 'ptr', undefined, 'x'.repeat(101))
+    )
+  })
+
   it('builds ndebit full access request', () => {
     assert.deepEqual(newNdebitFullAccessRequest('ptr'), { pointer: 'ptr' })
   })
@@ -41,6 +53,18 @@ describe('request builders', () => {
       frequency: { number: 1, unit: 'week' },
       pointer: 'ptr',
     })
+  })
+
+  it('builds ndebit budget request with description', () => {
+    assert.deepEqual(
+      newNdebitBudgetRequest({ number: 1, unit: 'week' }, 1000, 'ptr', 'weekly coffee'),
+      {
+        amount_sats: 1000,
+        frequency: { number: 1, unit: 'week' },
+        pointer: 'ptr',
+        description: 'weekly coffee',
+      }
+    )
   })
 
   it('builds nmanage helpers', () => {

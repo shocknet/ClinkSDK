@@ -1,9 +1,24 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { generateSecretKey, getPublicKey, nip44 } from 'nostr-tools'
-import { sendRequest } from '../../build/sender.js'
+import { sendRequest, setDebug } from '../../build/sender.js'
 
 const { getConversationKey, encrypt } = nip44
+
+async function captureConsole(fn) {
+  const lines = []
+  const originalLog = console.log
+  const originalError = console.error
+  console.log = (...args) => lines.push(args.join(' '))
+  console.error = (...args) => lines.push(args.join(' '))
+  try {
+    await fn()
+  } finally {
+    console.log = originalLog
+    console.error = originalError
+  }
+  return lines
+}
 
 function makeEncryptedReply(serverPriv, clientPub, payload) {
   return encrypt(JSON.stringify(payload), getConversationKey(serverPriv, clientPub))
@@ -224,6 +239,43 @@ describe('sender lifecycle', () => {
     assert.equal(pool.wasClosed(), true)
   })
 
+  it('matches peer pubkey case-insensitively', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    const pool = createMockPool({
+      replyFactory: () => [
+        {
+          id: 'reply1',
+          kind: 21001,
+          pubkey: serverPub,
+          content: makeEncryptedReply(serverPriv, clientPub, { bolt11: 'lnbc1dummy' }),
+        },
+      ],
+    })
+
+    const result = await sendRequest(
+      pool,
+      { privateKey: clientPriv, publicKey: clientPub },
+      ['wss://relay.example.com'],
+      serverPub.toUpperCase(),
+      {
+        kind: 21001,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['p', serverPub]],
+        content: 'unused',
+        pubkey: clientPub,
+      },
+      21001,
+      5
+    )
+
+    assert.deepEqual(result, { bolt11: 'lnbc1dummy' })
+    assert.equal(pool.wasClosed(), true)
+  })
+
   it('rejects on timeout', async () => {
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
@@ -253,5 +305,47 @@ describe('sender lifecycle', () => {
       /failed to get response in time/
     )
     assert.equal(pool.wasClosed(), true)
+  })
+})
+
+describe('debug logging', () => {
+  const clientPriv = generateSecretKey()
+  const clientPub = getPublicKey(clientPriv)
+  const serverPub = getPublicKey(generateSecretKey())
+  const request = {
+    kind: 21001,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [['p', serverPub]],
+    content: 'unused',
+    pubkey: clientPub,
+  }
+
+  const sendAndTimeout = () =>
+    sendRequest(
+      createMockPool({ replyFactory: () => [] }),
+      { privateKey: clientPriv, publicKey: clientPub },
+      ['wss://relay.example.com'],
+      serverPub,
+      request,
+      21001,
+      0.05
+    ).catch(() => {})
+
+  it('is silent by default', async () => {
+    const lines = await captureConsole(sendAndTimeout)
+    assert.deepEqual(lines, [])
+  })
+
+  it('logs lifecycle when enabled, and stops when disabled again', async () => {
+    setDebug(true)
+    const loud = await captureConsole(sendAndTimeout)
+    setDebug(false)
+    const quiet = await captureConsole(sendAndTimeout)
+
+    assert.ok(
+      loud.some((line) => line.includes('[ClinkSDK]')),
+      'expected ClinkSDK lifecycle logs when debug enabled'
+    )
+    assert.deepEqual(quiet, [])
   })
 })
