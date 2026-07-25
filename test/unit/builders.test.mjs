@@ -20,6 +20,17 @@ describe('request builders', () => {
     })
   })
 
+  it('builds ndebit payment request with k1', () => {
+    const k1 = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    assert.deepEqual(newNdebitPaymentRequest('lnbc1test', 5000, 'ptr', k1), {
+      bolt11: 'lnbc1test',
+      amount_sats: 5000,
+      pointer: 'ptr',
+      k1,
+    })
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', 5000, 'ptr', 'not-a-k1'))
+  })
+
   it('builds ndebit full access request', () => {
     assert.deepEqual(newNdebitFullAccessRequest('ptr'), { pointer: 'ptr' })
   })

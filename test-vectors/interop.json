@@ -5,7 +5,8 @@
     "notes": [
       "Length is a single byte (0–255), NOT 2-byte big-endian.",
       "Tag numbers and meanings are fixed — do not swap pubkey/relay; do not omit required tags.",
-      "Tag 0 (pubkey) is 32 raw bytes, not a UTF-8 hex string."
+      "Tag 0 (pubkey) is 32 raw bytes, not a UTF-8 hex string.",
+      "ndebit tag 3 (k1) is 32 raw bytes like tag 0, not a UTF-8 hex string."
     ],
     "noffer": {
       "0": "pubkey (32 bytes raw)",
@@ -17,7 +18,8 @@
     "ndebit": {
       "0": "pubkey (32 bytes raw)",
       "1": "relay (utf8)",
-      "2": "pointer (optional, utf8)"
+      "2": "pointer (optional, utf8)",
+      "3": "k1 session id (optional, 32 bytes raw — hex-encoded in NdebitData.k1)"
     },
     "nmanage": {
       "0": "pubkey (32 bytes raw)",
@@ -57,6 +59,15 @@
         "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
         "relay": "wss://relay.example.com",
         "pointer": "store_42"
+      }
+    },
+    "ndebit_session_k1": {
+      "encoded": "ndebit1qvsqzg69v7y6hn00qy352euf40x77qfrg4ncn27dauqjx3t83x4ummczppehgmmjv40ngvspzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mgqypcmwzavujr8eq97dvyr63yuxayx7vmephcw5ja7d6wwv9a7ud9kvg6dys8",
+      "decoded": {
+        "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+        "relay": "wss://relay.example.com",
+        "pointer": "store_42",
+        "k1": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       }
     }
   }

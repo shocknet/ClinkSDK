@@ -1,3 +1,4 @@
+import { randomBytes, bytesToHex } from '@noble/hashes/utils'
 import { nip44, getPublicKey, finalizeEvent } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
@@ -5,7 +6,19 @@ const { getConversationKey, decrypt, encrypt } = nip44
 
 export type RecurringDebitTimeUnit = 'day' | 'week' | 'month'
 export type BudgetFrequency = { number: number, unit: RecurringDebitTimeUnit }
-export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string }
+export type NdebitData = { pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string, description?: string }
+
+const K1_HEX_RE = /^[0-9a-f]{64}$/
+
+export const validateK1 = (k1: unknown): string => {
+    if (typeof k1 !== 'string' || !K1_HEX_RE.test(k1)) {
+        throw new Error('k1 must be 64 lowercase hex characters')
+    }
+    return k1
+}
+
+/** 32 random bytes as lowercase hex — for minting session ndebit TLV `3`. */
+export const generateK1 = (): string => bytesToHex(randomBytes(32))
 
 export type NdebitSuccess = { res: 'ok', preimage?: string }
 export type NdebitFailure = { res: 'GFY', error: string, code: number }
@@ -48,12 +61,14 @@ export const newNdebitFullAccessRequest = (pointer?: string): NdebitData => {
         pointer: pointer
     }
 }
-export const newNdebitPaymentRequest = (invoice: string, amount?: number, pointer?: string): NdebitData => {
-    return {
+export const newNdebitPaymentRequest = (invoice: string, amount?: number, pointer?: string, k1?: string): NdebitData => {
+    const req: NdebitData = {
         bolt11: invoice,
         amount_sats: amount,
-        pointer: pointer
+        pointer: pointer,
     }
+    if (k1 !== undefined) req.k1 = validateK1(k1)
+    return req
 }
 
 export const newNdebitBudgetRequest = (frequency: BudgetFrequency, amount: number, pointer?: string): NdebitData => {

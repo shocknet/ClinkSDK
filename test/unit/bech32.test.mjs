@@ -40,7 +40,20 @@ describe('bech32 round-trip', () => {
     assert.equal(result.data.pubkey, decoded.pubkey)
     assert.equal(result.data.relay, decoded.relay)
     assert.equal(result.data.pointer, decoded.pointer)
+    assert.equal(result.data.k1, undefined)
     assert.equal(ndebitEncode(decoded), encoded)
+  })
+
+  it('round-trips ndebit with session k1 (TLV 3)', () => {
+    const { encoded, decoded } = fixtures.ndebit_with_k1
+    assert.equal(ndebitEncode(decoded), encoded)
+    const result = decodeBech32(encoded)
+    assert.equal(result.type, 'ndebit')
+    assert.equal(result.data.pubkey, decoded.pubkey)
+    assert.equal(result.data.relay, decoded.relay)
+    assert.equal(result.data.pointer, decoded.pointer)
+    assert.equal(result.data.k1, decoded.k1)
+    assert.equal(ndebitEncode(result.data), encoded)
   })
 
   it('round-trips nmanage encode/decode', () => {
