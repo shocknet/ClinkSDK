@@ -140,7 +140,7 @@ describe('sender lifecycle', () => {
     assert.equal(pool.wasClosed(), true)
   })
 
-  it('rejects on decrypt failure', async () => {
+  it('rejects on decrypt failure from expected peer', async () => {
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
     const serverPub = getPublicKey(generateSecretKey())
@@ -176,6 +176,51 @@ describe('sender lifecycle', () => {
         ),
       /./
     )
+    assert.equal(pool.wasClosed(), true)
+  })
+
+  it('ignores forged non-peer events and still resolves the real reply', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+    const attackerPriv = generateSecretKey()
+    const attackerPub = getPublicKey(attackerPriv)
+
+    const pool = createMockPool({
+      replyFactory: () => [
+        {
+          id: 'forged',
+          kind: 21001,
+          pubkey: attackerPub,
+          content: 'not-valid-nip44',
+        },
+        {
+          id: 'reply1',
+          kind: 21001,
+          pubkey: serverPub,
+          content: makeEncryptedReply(serverPriv, clientPub, { bolt11: 'lnbc1dummy' }),
+        },
+      ],
+    })
+
+    const result = await sendRequest(
+      pool,
+      { privateKey: clientPriv, publicKey: clientPub },
+      ['wss://relay.example.com'],
+      serverPub,
+      {
+        kind: 21001,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['p', serverPub]],
+        content: 'unused',
+        pubkey: clientPub,
+      },
+      21001,
+      5
+    )
+
+    assert.deepEqual(result, { bolt11: 'lnbc1dummy' })
     assert.equal(pool.wasClosed(), true)
   })
 

@@ -102,11 +102,20 @@ jobs:
 
       - name: Start strfry
         run: |
+          # Named volume so LMDB can create /app/strfry-db (image may lack a writable dir)
+          docker volume create strfry-db
           docker run -d --name strfry \
             -p 7777:7777 \
             -v "$PWD/test/compat/strfry.conf:/etc/strfry.conf:ro" \
+            -v strfry-db:/app/strfry-db \
             dockurr/strfry:latest
           docker ps
+          # Fail fast if the container exited (e.g. mdb_env_open)
+          sleep 1
+          if [ "$(docker inspect -f '{{.State.Running}}' strfry)" != "true" ]; then
+            docker logs strfry || true
+            exit 1
+          fi
 
       - name: Materialize current + prior trees
         run: npm run test:setup-trees

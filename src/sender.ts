@@ -43,6 +43,12 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             closer = pool.subscribeMany(relays, [filter], {
                 onevent: async (e) => {
                     console.log(`[ClinkSDK] Received response event: kind=${e.kind}, eventId=${e.id}, from=${e.pubkey}`)
+                    // Filter is tag-based only — ignore anyone who is not the expected peer so a
+                    // forged #e/#p event cannot DoS the request by failing decrypt ahead of the real reply.
+                    if (e.pubkey !== toPub) {
+                        console.log(`[ClinkSDK] Ignoring event from unexpected pubkey ${e.pubkey} (expected ${toPub})`)
+                        return
+                    }
                     try {
                         const content = decrypt(e.content, getConversationKey(pair.privateKey, toPub))
                         const parsed = JSON.parse(content)
