@@ -105,7 +105,14 @@ pool.subscribeMany(
   }
 )
 
-process.on('SIGINT', () => {
-  pool.destroy?.()
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
+
+function shutdown() {
+  try {
+    pool.destroy?.()
+  } catch {
+    // ignore
+  }
   process.exit(0)
-})
+}

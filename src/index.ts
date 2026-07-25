@@ -38,6 +38,11 @@ export class ClinkSDK {
         return SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
     }
 
+    /** Close relay connections. Call when done so the process can exit. */
+    Stop = () => {
+        this.pool.destroy()
+    }
+
     static decodeBech32 = decodeBech32
     static generateSecretKey = generateSecretKey
     static newListRequest = newListRequest

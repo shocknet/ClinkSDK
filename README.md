@@ -223,6 +223,8 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `Nmanage(data: NmanageRequest, timeoutSeconds?: number)`
   - Sends a `kind: 21003` management request.
   - Returns a `Promise<NmanageResponse>` that resolves with the result of the management action.
+- `Stop()`
+  - Closes relay connections on the internal pool. Call when finished so the process can exit cleanly.
 
 
 ### Encoding/Decoding

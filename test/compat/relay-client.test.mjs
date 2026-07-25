@@ -12,6 +12,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const relayUrl = process.env.RELAY_URL || 'ws://127.0.0.1:7777'
 const receiptDelayMs = Number(process.env.RECEIPT_DELAY_MS || 2000)
 
+function killResponder(child) {
+  if (!child || child.killed) return
+  child.kill('SIGTERM')
+  // Force-exit if pool.destroy / WS close stalls
+  setTimeout(() => {
+    if (!child.killed) child.kill('SIGKILL')
+  }, 2000).unref()
+}
+
 describe('strfry request/response A↔B', () => {
   let serverPrivHex
   let serverPub
@@ -21,6 +30,18 @@ describe('strfry request/response A↔B', () => {
   let sdk
   let generateSecretKey
   let getPublicKey
+  const clients = []
+
+  function makeClient() {
+    const client = new sdk.ClinkSDK({
+      privateKey: generateSecretKey(),
+      relays: [relayUrl],
+      toPubKey: serverPub,
+      defaultTimeoutSeconds: 15,
+    })
+    clients.push(client)
+    return client
+  }
 
   before(async () => {
     readCompatMeta()
@@ -61,29 +82,26 @@ describe('strfry request/response A↔B', () => {
   })
 
   after(() => {
-    responder?.kill('SIGTERM')
+    for (const client of clients) {
+      try {
+        client.Stop()
+      } catch {
+        // ignore
+      }
+    }
+    killResponder(responder)
     if (readyDir) rmSync(readyDir, { recursive: true, force: true })
   })
 
   it('noffer happy path returns dummy bolt11', async () => {
-    const client = new sdk.ClinkSDK({
-      privateKey: generateSecretKey(),
-      relays: [relayUrl],
-      toPubKey: serverPub,
-      defaultTimeoutSeconds: 15,
-    })
+    const client = makeClient()
     const response = await client.Noffer({ offer: 'test_offer', amount_sats: 21 })
     assert.ok('bolt11' in response, `expected bolt11, got ${JSON.stringify(response)}`)
     assert.match(response.bolt11, /^lnbc1/)
   })
 
   it('ndebit happy path returns ok', async () => {
-    const client = new sdk.ClinkSDK({
-      privateKey: generateSecretKey(),
-      relays: [relayUrl],
-      toPubKey: serverPub,
-      defaultTimeoutSeconds: 15,
-    })
+    const client = makeClient()
     const response = await client.Ndebit(
       sdk.newNdebitPaymentRequest('lnbc1clientinvoice', 100, 'ptr')
     )
@@ -91,23 +109,13 @@ describe('strfry request/response A↔B', () => {
   })
 
   it('fast-reply race still resolves', async () => {
-    const client = new sdk.ClinkSDK({
-      privateKey: generateSecretKey(),
-      relays: [relayUrl],
-      toPubKey: serverPub,
-      defaultTimeoutSeconds: 15,
-    })
+    const client = makeClient()
     const response = await client.Noffer({ offer: 'fast', amount_sats: 1 })
     assert.ok('bolt11' in response)
   })
 
   it('receipt callback fires on delayed synthetic receipt', async () => {
-    const client = new sdk.ClinkSDK({
-      privateKey: generateSecretKey(),
-      relays: [relayUrl],
-      toPubKey: serverPub,
-      defaultTimeoutSeconds: 15,
-    })
+    const client = makeClient()
 
     let receipt = null
     const primary = await client.Noffer(
