@@ -83,8 +83,8 @@ jobs:
       CANDIDATE: ${{ needs.compare.outputs.candidate }}
       PINNED: ${{ needs.compare.outputs.pinned }}
       BRANCH: chore/bump-nostr-tools-${{ needs.compare.outputs.candidate }}
-      TITLE: chore: bump nostr-tools to ${{ needs.compare.outputs.candidate }}
-      ISSUE_TITLE: nostr-tools@${{ needs.compare.outputs.candidate }} fails ClinkSDK compat
+      TITLE: "chore: bump nostr-tools to ${{ needs.compare.outputs.candidate }}"
+      ISSUE_TITLE: "nostr-tools@${{ needs.compare.outputs.candidate }} fails ClinkSDK compat"
     steps:
       - uses: actions/checkout@v4
 
