@@ -41,7 +41,7 @@ function prepareCurrentTree() {
   // Isolated tree so candidate nostr-tools installs do not mutate the repo checkout.
   for (const name of ['package.json', 'package-lock.json', 'build', 'src', 'tsconfig.json']) {
     const src = join(repoRoot, name)
-    if (!existsSync(src)) throw new Error(`missing ${name}; run npm run prepack first`)
+    if (!existsSync(src)) throw new Error(`missing ${name}; run npm run prepare first`)
     cpSync(src, join(currentTree, name), { recursive: true })
   }
 
@@ -55,8 +55,8 @@ function prepareCurrentTree() {
       stdio: 'inherit',
     })
     // Candidate must typecheck/build (catches deep import breaks like lib/types/pool).
-    console.log(`[setup-trees] prepack against nostr-tools@${candidate}`)
-    sh('npm', ['run', 'prepack'], { cwd: currentTree, stdio: 'inherit' })
+    console.log(`[setup-trees] prepare against nostr-tools@${candidate}`)
+    sh('npm', ['run', 'prepare'], { cwd: currentTree, stdio: 'inherit' })
   }
 }
 
