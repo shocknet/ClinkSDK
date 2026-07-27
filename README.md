@@ -18,6 +18,7 @@
 - [API Reference](#api-reference)
   - [ClinkSDK](#clinksdk)
   - [Encoding/Decoding](#encodingdecoding)
+  - [Validators](#validators)
   - [Nostr Helpers (re-exported)](#nostr-helpers-re-exported)
   - [Types](#types)
 - [Troubleshooting & Language Porting](#troubleshooting--language-porting)
@@ -236,6 +237,13 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `generateK1(): string` — 32-byte session identifier as lowercase hex (ndebit TLV `3`)
 - `validateK1(k1: unknown): string` — throws unless `k1` is 64 lowercase hex chars; returns it unchanged
 
+### Validators
+
+For validating inbound/outbound CLINK payloads (e.g. server-side request checks). Each throws on invalid input and returns the typed value on success:
+
+- `validateNofferData`, `validateNdebitData`, `validateK1`, `validateBudgetFrequency`
+- `validateNmanageRequest` and per-action helpers: `validateNmanageCreateOffer`, `validateNmanageUpdateOffer`, `validateNmanageDeleteOffer`, `validateNmanageGetOffer`, `validateNmanageListOffers`, `validateOfferFields`
+
 ### Debug
 - `setDebug(enabled: boolean)` — when `true`, logs relay subscribe/publish/response lifecycle to the console (default `false`)
 
@@ -256,7 +264,7 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 | `UnsignedEvent` | type | Event shape before `finalizeEvent` |
 
 ### Types
-- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: any }`
+- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: Record<string, string> }`
 - **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number } }`
 - **`NofferReceipt`**: `{ res: 'ok' }` - The receipt object sent when an invoice is paid
 - **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string, description?: string }`

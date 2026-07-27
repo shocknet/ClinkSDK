@@ -30,20 +30,30 @@ jobs:
         with:
           node-version: '22'
 
-      - id: cmp
-        name: Compare registry vs pin
+      - id: pinned
+        name: Read pinned nostr-tools version
+        run: |
+          PINNED=$(node -p "require('./package.json').dependencies['nostr-tools']")
+          PINNED=${PINNED#=}
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+
+      - id: candidate
+        name: Resolve candidate version
         env:
           FORCED_VERSION: ${{ inputs.nostr_tools_version }}
         run: |
-          set -euo pipefail
-          PINNED=$(node -p "require('./package.json').dependencies['nostr-tools']")
-          # Strip any semver range prefix if present (we pin exact)
-          PINNED=${PINNED#=}
           if [ -n "$FORCED_VERSION" ]; then
-            CANDIDATE="$FORCED_VERSION"
+            echo "candidate=$FORCED_VERSION" >> "$GITHUB_OUTPUT"
           else
-            CANDIDATE=$(npm view nostr-tools version)
+            echo "candidate=$(npm view nostr-tools version)" >> "$GITHUB_OUTPUT"
           fi
+
+      - id: cmp
+        name: Compare registry vs pin
+        env:
+          PINNED: ${{ steps.pinned.outputs.pinned }}
+          CANDIDATE: ${{ steps.candidate.outputs.candidate }}
+        run: |
           echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
           echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
           if [ "$CANDIDATE" = "$PINNED" ]; then
@@ -62,10 +72,19 @@ jobs:
       nostr_tools_version: ${{ needs.compare.outputs.candidate }}
       run_relay: true
 
+  # always() is required: without it, a failed test-candidate skips this job and
+  # we never open the tracking issue. The newer==true gate still early-exits when pin is current.
   conclude:
     needs: [compare, test-candidate]
     if: always() && needs.compare.outputs.newer == 'true'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CANDIDATE: ${{ needs.compare.outputs.candidate }}
+      PINNED: ${{ needs.compare.outputs.pinned }}
+      BRANCH: chore/bump-nostr-tools-${{ needs.compare.outputs.candidate }}
+      TITLE: chore: bump nostr-tools to ${{ needs.compare.outputs.candidate }}
+      ISSUE_TITLE: nostr-tools@${{ needs.compare.outputs.candidate }} fails ClinkSDK compat
     steps:
       - uses: actions/checkout@v4
 
@@ -73,59 +92,76 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Open bump PR or tracking issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CANDIDATE: ${{ needs.compare.outputs.candidate }}
-          PINNED: ${{ needs.compare.outputs.pinned }}
-          TEST_RESULT: ${{ needs.test-candidate.result }}
+      # --- green path: bump PR ---
+      - name: Configure git identity
+        if: needs.test-candidate.result == 'success'
         run: |
-          set -euo pipefail
-          BRANCH="chore/bump-nostr-tools-${CANDIDATE}"
-          TITLE="chore: bump nostr-tools to ${CANDIDATE}"
-          ISSUE_TITLE="nostr-tools@${CANDIDATE} fails ClinkSDK compat"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ "$TEST_RESULT" = "success" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Checkout bump branch from main
+        if: needs.test-candidate.result == 'success'
+        run: |
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
 
-            # Refresh branch from main
-            git fetch origin main
-            git checkout -B "$BRANCH" origin/main
+      - name: Install candidate nostr-tools
+        if: needs.test-candidate.result == 'success'
+        run: npm install "nostr-tools@${CANDIDATE}" --save-exact
 
-            npm install "nostr-tools@${CANDIDATE}" --save-exact
-            git add package.json package-lock.json
-            if git diff --cached --quiet; then
-              echo "no changes to commit"
-            else
-              git commit -m "$TITLE"
-              git push -u origin "$BRANCH" --force-with-lease
-            fi
-
-            if gh pr list --head "$BRANCH" --json number --jq 'length' | grep -q '^0$'; then
-              gh pr create --title "$TITLE" --body "Automated bump after green compat suite against \`nostr-tools@${CANDIDATE}\` (was \`${PINNED}\`)."
-            else
-              echo "PR already open for $BRANCH"
-            fi
-
-            # Close tracking issue if present
-            EXISTING=$(gh issue list --search "$ISSUE_TITLE in:title" --state open --json number --jq '.[0].number // empty')
-            if [ -n "$EXISTING" ]; then
-              gh issue close "$EXISTING" --comment "Compat suite passed for nostr-tools@${CANDIDATE}; bump PR opened/updated."
-            fi
+      - name: Commit and push bump
+        if: needs.test-candidate.result == 'success'
+        run: |
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
           else
-            BODY=$(cat <<EOF
+            git commit -m "$TITLE"
+            git push -u origin "$BRANCH" --force-with-lease
+          fi
+
+      - name: Open bump PR if missing
+        if: needs.test-candidate.result == 'success'
+        run: |
+          if gh pr list --head "$BRANCH" --json number --jq 'length' | grep -q '^0$'; then
+            gh pr create --title "$TITLE" --body "Automated bump after green compat suite against \`nostr-tools@${CANDIDATE}\` (was \`${PINNED}\`)."
+          else
+            echo "PR already open for $BRANCH"
+          fi
+
+      - name: Close tracking issue if present
+        if: needs.test-candidate.result == 'success'
+        run: |
+          EXISTING=$(gh issue list --search "$ISSUE_TITLE in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue close "$EXISTING" --comment "Compat suite passed for nostr-tools@${CANDIDATE}; bump PR opened/updated."
+          else
+            echo "no open tracking issue"
+          fi
+
+      # --- red path: tracking issue ---
+      - name: Open or update tracking issue
+        if: needs.test-candidate.result != 'success'
+        env:
+          TEST_RESULT: ${{ needs.test-candidate.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          BODY=$(cat <<EOF
           Automated poll found \`nostr-tools@${CANDIDATE}\` (pin \`${PINNED}\`) but the ClinkSDK compat suite failed (\`test-candidate\` result: \`${TEST_RESULT}\`).
 
-          Inspect the [poll workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          Inspect the [poll workflow run](${RUN_URL}).
           Do not bump until green.
           EOF
           )
-            EXISTING=$(gh issue list --search "$ISSUE_TITLE in:title" --state open --json number --jq '.[0].number // empty')
-            if [ -n "$EXISTING" ]; then
-              gh issue comment "$EXISTING" --body "$BODY"
-            else
-              gh issue create --title "$ISSUE_TITLE" --body "$BODY"
-            fi
-            exit 1
+          EXISTING=$(gh issue list --search "$ISSUE_TITLE in:title" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body "$BODY"
           fi
+
+      - name: Fail job when compat suite failed
+        if: needs.test-candidate.result != 'success'
+        run: |
+          echo "test-candidate result: ${{ needs.test-candidate.result }}"
+          exit 1

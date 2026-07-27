@@ -21,6 +21,31 @@ export const validateK1 = (k1: unknown): string => {
 /** 32 random bytes as lowercase hex — for minting session ndebit TLV `3`. */
 export const generateK1 = (): string => bytesToHex(randomBytes(32))
 
+export const validateBudgetFrequency = (frequency: unknown): BudgetFrequency => {
+    if (typeof frequency !== 'object' || frequency === null) throw new Error('frequency must be an object')
+    if (!('number' in frequency) || typeof frequency.number !== 'number') throw new Error('frequency.number must be a number')
+    if (frequency.number <= 0 || !Number.isInteger(frequency.number)) throw new Error('frequency.number must be a positive integer')
+    if (!('unit' in frequency) || typeof frequency.unit !== 'string') throw new Error('frequency.unit must be a string')
+    if (frequency.unit !== 'day' && frequency.unit !== 'week' && frequency.unit !== 'month') {
+        throw new Error('frequency.unit must be day, week, or month')
+    }
+    return frequency as BudgetFrequency
+}
+
+export const validateNdebitData = (data: unknown): NdebitData => {
+    if (typeof data !== 'object' || data === null) throw new Error('data must be an object')
+    if ('pointer' in data && typeof data.pointer !== 'string') throw new Error('pointer must be a string if present')
+    if ('amount_sats' in data && typeof data.amount_sats !== 'number') throw new Error('amount_sats must be a number if present')
+    if ('bolt11' in data && typeof data.bolt11 !== 'string') throw new Error('bolt11 must be a string if present')
+    if ('frequency' in data) validateBudgetFrequency(data.frequency)
+    if ('k1' in data) validateK1(data.k1)
+    if ('description' in data) {
+        if (typeof data.description !== 'string') throw new Error('description must be a string if present')
+        assertDescription(data.description)
+    }
+    return data as NdebitData
+}
+
 const assertDescription = (description?: string) => {
     if (description !== undefined && description.length > DESC_MAX) {
         throw new Error('Description must be less than 100 characters')
