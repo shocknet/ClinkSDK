@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      nostr_tools_version:
+        description: Optional nostr-tools version override for current tree
+        required: false
+        type: string
+      prior_sdk_version:
+        description: Optional prior @shocknet/clink-sdk version (default npm view latest)
+        required: false
+        type: string
+      run_relay:
+        description: Run strfry relay compat job
+        required: false
+        type: boolean
+        default: true
+      pr_number:
+        description: Optional PR number to checkout (refs/pull/N/merge)
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      nostr_tools_version:
+        description: Optional nostr-tools version override for current tree
+        required: false
+        type: string
+      prior_sdk_version:
+        description: Optional prior @shocknet/clink-sdk version
+        required: false
+        type: string
+      run_relay:
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nostr_tools_version || 'pinned' }}
+  cancel-in-progress: true
+
+env:
+  NOSTR_TOOLS_VERSION: ${{ inputs.nostr_tools_version || '' }}
+  PRIOR_SDK_VERSION: ${{ inputs.prior_sdk_version || '' }}
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr_number && format('refs/pull/{0}/merge', inputs.pr_number) || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run prepack
+      - run: npm run test:unit
+
+  compat-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr_number && format('refs/pull/{0}/merge', inputs.pr_number) || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run prepack
+      - name: Materialize trees + offline compat
+        run: npm run test:compat-offline
+
+  compat-relay:
+    # inputs.run_relay is unset for pull_request/push; toJSON avoids '' == false coercion
+    if: ${{ toJSON(inputs.run_relay) != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr_number && format('refs/pull/{0}/merge', inputs.pr_number) || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run prepack
+
+      - name: Start strfry
+        run: |
+          # Named volume so LMDB can create /app/strfry-db (image may lack a writable dir)
+          docker volume create strfry-db
+          docker run -d --name strfry \
+            -p 7777:7777 \
+            -v "$PWD/test/compat/strfry.conf:/etc/strfry.conf:ro" \
+            -v strfry-db:/app/strfry-db \
+            dockurr/strfry:latest
+          docker ps
+          # Fail fast if the container exited (e.g. mdb_env_open)
+          sleep 1
+          if [ "$(docker inspect -f '{{.State.Running}}' strfry)" != "true" ]; then
+            docker logs strfry || true
+            exit 1
+          fi
+
+      - name: Materialize current + prior trees
+        run: npm run test:setup-trees
+
+      - name: Wait for strfry
+        run: npm run test:wait-relay
+        env:
+          RELAY_URL: ws://127.0.0.1:7777
+          RELAY_WAIT_MS: '90000'
+
+      - name: Relay ping-pong
+        run: npm run test:compat-relay
+        env:
+          RELAY_URL: ws://127.0.0.1:7777
+          RECEIPT_DELAY_MS: '2000'
+
+      - name: strfry logs on failure
+        if: failure()
+        run: docker logs strfry || true

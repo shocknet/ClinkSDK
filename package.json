@@ -1,6 +1,6 @@
 {
     "name": "@shocknet/clink-sdk",
-    "version": "1.5.5",
+    "version": "1.6.0",
     "description": "sdk client for clink",
     "repository": {
         "type": "git",
@@ -10,8 +10,13 @@
     "scripts": {
         "clean": "rimraf build",
         "prepack": "npm run clean && tsc",
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "start": "npm run prepack && node build/index.js"
+        "test": "npm run prepack && node --test test/unit/*.test.mjs",
+        "start": "npm run prepack && node build/index.js",
+        "test:unit": "node --test test/unit/*.test.mjs",
+        "test:setup-trees": "node test/compat/setup-trees.mjs",
+        "test:compat-offline": "node test/compat/setup-trees.mjs && node --test test/compat/cross-decrypt.test.mjs",
+        "test:compat-relay": "node --test test/compat/relay-client.test.mjs",
+        "test:wait-relay": "node test/compat/wait-for-relay.mjs"
     },
     "type": "module",
     "author": "",

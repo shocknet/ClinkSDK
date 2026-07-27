@@ -1,0 +1,36 @@
+{
+  "noffer": {
+    "encoded": "noffer1qszqqqqraqpszqqzp9hkven9wf0kzcnrqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqs8rdct4njgvlyqhe4ss02ynsm5smen0yxlp6jthehfeeshhm35kes9yppf9",
+    "decoded": {
+      "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+      "relay": "wss://relay.example.com",
+      "offer": "offer_abc",
+      "priceType": 0,
+      "price": 1000
+    }
+  },
+  "ndebit": {
+    "encoded": "ndebit1qgy8xar0wfj47dpjqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqs8rdct4njgvlyqhe4ss02ynsm5smen0yxlp6jthehfeeshhm35kesh4xxz5",
+    "decoded": {
+      "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+      "relay": "wss://relay.example.com",
+      "pointer": "store_42"
+    }
+  },
+  "ndebit_with_k1": {
+    "encoded": "ndebit1qvsqzg69v7y6hn00qy352euf40x77qfrg4ncn27dauqjx3t83x4ummczppehgmmjv40ngvspzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mgqypcmwzavujr8eq97dvyr63yuxayx7vmephcw5ja7d6wwv9a7ud9kvg6dys8",
+    "decoded": {
+      "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+      "relay": "wss://relay.example.com",
+      "pointer": "store_42",
+      "k1": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  },
+  "nmanage": {
+    "decoded": {
+      "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+      "relay": "wss://relay.example.com",
+      "pointer": "store_42"
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "description": "Interop vectors for CLINK language ports. A correct implementation MUST round-trip these. Do not invent NIP-44 or NIP-19-style TLV/bech32 — match @shocknet/clink-sdk (and the NIP-44 version on the wire).",
+  "tlv": {
+    "layout": "type (1 byte) | length (1 byte) | value (length bytes) — same NIP-19 TLV layout as nprofile/etc.; CLINK defines HRPs and tag meanings only",
+    "notes": [
+      "Length is a single byte (0–255), NOT 2-byte big-endian.",
+      "Tag numbers and meanings are fixed — do not swap pubkey/relay; do not omit required tags.",
+      "Tag 0 (pubkey) is 32 raw bytes, not a UTF-8 hex string.",
+      "ndebit tag 3 (k1) is 32 raw bytes like tag 0, not a UTF-8 hex string."
+    ],
+    "noffer": {
+      "0": "pubkey (32 bytes raw)",
+      "1": "relay (utf8)",
+      "2": "offer id (utf8)",
+      "3": "priceType (1 byte: 0=Fixed, 1=Variable, 2=Spontaneous)",
+      "4": "price (optional, 4-byte big-endian uint32)"
+    },
+    "ndebit": {
+      "0": "pubkey (32 bytes raw)",
+      "1": "relay (utf8)",
+      "2": "pointer (optional, utf8)",
+      "3": "k1 session id (optional, 32 bytes raw — hex-encoded in NdebitData.k1)"
+    },
+    "nmanage": {
+      "0": "pubkey (32 bytes raw)",
+      "1": "relay (utf8)",
+      "2": "pointer (optional, utf8)"
+    }
+  },
+  "nip44_v2": {
+    "conversation_key": "HKDF-Extract(SHA-256, salt=UTF8(\"nip44-v2\"), IKM=ECDH shared X coordinate)",
+    "message_keys": "HKDF-Expand(SHA-256, PRK=conversation_key, info=32-byte nonce, L=76) → chacha_key(32) | chacha_nonce(12) | hmac_key(32)",
+    "payload": "version(1)=0x02 | nonce(32) | ciphertext | hmac(32)",
+    "not": [
+      "Do NOT use HMAC(key=\"nip44-v2\", msg=sharedX) for the conversation key",
+      "Do NOT use ChaCha20-Poly1305 AEAD with a 12-byte salt/nonce layout",
+      "Do NOT use HKDF info strings like \"nip44-v2-keys\" or \"nip44-v2-message-key\""
+    ],
+    "fixed_conversation_key_vector": {
+      "privkey_hex": "0000000000000000000000000000000000000000000000000000000000000001",
+      "peer_pubkey_hex": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "conversation_key_hex": "c41c775356fd92eadc63ff5a0dc1da211b268cbea22316767095b2871ea1412d"
+    }
+  },
+  "bech32_roundtrip": {
+    "noffer": {
+      "encoded": "noffer1qszqqqqraqpszqqzp9hkven9wf0kzcnrqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqs8rdct4njgvlyqhe4ss02ynsm5smen0yxlp6jthehfeeshhm35kes9yppf9",
+      "decoded": {
+        "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+        "relay": "wss://relay.example.com",
+        "offer": "offer_abc",
+        "priceType": 0,
+        "price": 1000
+      }
+    },
+    "ndebit": {
+      "encoded": "ndebit1qgy8xar0wfj47dpjqythwumn8ghj7un9d3shjtn90psk6urvv5hxxmmdqqs8rdct4njgvlyqhe4ss02ynsm5smen0yxlp6jthehfeeshhm35kesh4xxz5",
+      "decoded": {
+        "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+        "relay": "wss://relay.example.com",
+        "pointer": "store_42"
+      }
+    },
+    "ndebit_session_k1": {
+      "encoded": "ndebit1qvsqzg69v7y6hn00qy352euf40x77qfrg4ncn27dauqjx3t83x4ummczppehgmmjv40ngvspzamhxue69uhhyetvv9ujuetcv9khqmr99e3k7mgqypcmwzavujr8eq97dvyr63yuxayx7vmephcw5ja7d6wwv9a7ud9kvg6dys8",
+      "decoded": {
+        "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+        "relay": "wss://relay.example.com",
+        "pointer": "store_42",
+        "k1": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  }
+}
