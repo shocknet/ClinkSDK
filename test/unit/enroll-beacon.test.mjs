@@ -4,6 +4,7 @@ import { generateSecretKey, getPublicKey, finalizeEvent, nip19, nip44 } from 'no
 import {
   countLeadingZeroBits,
   mineNip13,
+  FetchClinkBeacon,
   parseClinkBeaconContent,
   parseClinkBeaconEvent,
   beaconIsFresh,
@@ -46,6 +47,16 @@ describe('nip13 mining', () => {
 
 describe('beacon parse', () => {
   const now = Math.floor(Date.now() / 1000)
+  const servicePriv = generateSecretKey()
+  const servicePub = getPublicKey(servicePriv)
+
+  const signBeacon = (overrides = {}) => finalizeEvent({
+    kind: CLINK_BEACON_KIND,
+    created_at: now,
+    tags: [['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION]],
+    content: '{}',
+    ...overrides,
+  }, servicePriv)
 
   it('parses clink-node content and ignores junk', () => {
     const content = parseClinkBeaconContent({
@@ -61,38 +72,70 @@ describe('beacon parse', () => {
     assert.deepEqual(content.fees, { serviceFeeFloor: 1, serviceFeeBps: 60 })
   })
 
+  it('rejects unsigned and forged events', () => {
+    const unsigned = {
+      kind: CLINK_BEACON_KIND,
+      pubkey: servicePub,
+      created_at: now,
+      tags: [['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION]],
+      content: JSON.stringify({ enroll_difficulty: 1 }),
+      id: '00'.repeat(32),
+      sig: '00'.repeat(64),
+    }
+    assert.equal(parseClinkBeaconEvent(unsigned), null)
+  })
+
   it('rejects legacy d-tag and missing version', () => {
-    assert.equal(parseClinkBeaconEvent({
-      kind: CLINK_BEACON_KIND,
-      pubkey: 'ab'.repeat(32),
-      created_at: now,
-      tags: [['d', 'Lightning.Pub']],
-      content: '{}',
-    }), null)
-    assert.equal(parseClinkBeaconEvent({
-      kind: CLINK_BEACON_KIND,
-      pubkey: 'ab'.repeat(32),
-      created_at: now,
+    assert.equal(parseClinkBeaconEvent(signBeacon({
+      tags: [['d', 'Lightning.Pub'], ['clink_version', CLINK_VERSION]],
+    })), null)
+    assert.equal(parseClinkBeaconEvent(signBeacon({
       tags: [['d', CLINK_BEACON_D_TAG]],
-      content: '{}',
-    }), null)
+    })), null)
   })
 
   it('uses enroll_difficulty only while the beacon is fresh', () => {
-    const beacon = parseClinkBeaconEvent({
-      kind: CLINK_BEACON_KIND,
-      pubkey: 'AB'.repeat(32),
-      created_at: now,
+    const beacon = parseClinkBeaconEvent(signBeacon({
       tags: [['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION], ['operator', 'CD'.repeat(32)]],
       content: JSON.stringify({ enroll_difficulty: 18 }),
-    })
+    }))
     assert.ok(beacon)
-    assert.equal(beacon.pubkey, 'ab'.repeat(32))
+    assert.equal(beacon.pubkey, servicePub)
     assert.equal(beacon.operator, 'cd'.repeat(32))
     assert.equal(beaconIsFresh(beacon, now * 1000), true)
     assert.equal(enrollDifficultyFromBeacon(beacon, now * 1000), 18)
     assert.equal(enrollDifficultyFromBeacon(beacon, (now + 181) * 1000), undefined)
     assert.equal(beaconIsFresh(beacon, (now - 31) * 1000), false)
+  })
+
+  it('ignores unsigned relay spoofs when fetching', async () => {
+    const signed = signBeacon({
+      created_at: now,
+      content: JSON.stringify({ enroll_difficulty: 18, name: 'real' }),
+    })
+    const spoof = {
+      kind: signed.kind,
+      pubkey: signed.pubkey,
+      created_at: now + 10,
+      tags: signed.tags,
+      content: JSON.stringify({ enroll_difficulty: 1, name: 'fake' }),
+      id: '11'.repeat(32),
+      sig: '11'.repeat(64),
+    }
+    const pool = {
+      subscribeMany(_relays, _filters, opts) {
+        queueMicrotask(() => {
+          opts.onevent(spoof)
+          opts.onevent(signed)
+          opts.oneose()
+        })
+        return { close: () => {} }
+      },
+    }
+    const beacon = await FetchClinkBeacon(pool, ['wss://relay.example'], servicePub, 2)
+    assert.ok(beacon)
+    assert.equal(beacon.content.name, 'real')
+    assert.equal(beacon.content.enroll_difficulty, 18)
   })
 })
 

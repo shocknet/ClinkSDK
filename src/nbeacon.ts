@@ -1,5 +1,5 @@
 import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
-import { Event } from "nostr-tools"
+import { Event, verifyEvent } from "nostr-tools"
 import {
     BEACON_FUTURE_SKEW_SECONDS,
     BEACON_STALE_AFTER_SECONDS,
@@ -96,7 +96,10 @@ const dTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "
 const versionTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "clink_version")?.[1]
 const operatorTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "operator")?.[1]
 
-export const parseClinkBeaconEvent = (event: Pick<Event, "pubkey" | "created_at" | "kind" | "tags" | "content">): ClinkBeacon | null => {
+export const parseClinkBeaconEvent = (event: Event): ClinkBeacon | null => {
+    if (!verifyEvent(event)) {
+        return null
+    }
     if (event.kind !== CLINK_BEACON_KIND) {
         return null
     }
@@ -167,6 +170,9 @@ export const FetchClinkBeacon = async (
         }], {
             onevent: (event: Event) => {
                 if (event.pubkey.toLowerCase() !== expectedPub) {
+                    return
+                }
+                if (!verifyEvent(event)) {
                     return
                 }
                 if (!best || event.created_at > best.created_at) {
