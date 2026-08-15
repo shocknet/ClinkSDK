@@ -15,6 +15,8 @@
   - [1. Encoding/Decoding Offers and Debits](#1-encodingdecoding-offers-and-debits)
   - [2. Sending a CLINK Offer Request (Lightning Invoice)](#2-sending-a-clink-offer-request-lightning-invoice)
   - [3. Sending a CLINK Debit Request](#3-sending-a-clink-debit-request)
+  - [4. Beacon](#4-beacon)
+  - [5. Enroll](#5-enroll)
 - [API Reference](#api-reference)
   - [ClinkSDK](#clinksdk)
   - [Encoding/Decoding](#encodingdecoding)
@@ -40,7 +42,8 @@
 ## Features
 
 - Encode/decode CLINK Static Offers (`noffer1...`) and Debits (`ndebit1...`) per the spec.
-- Send and receive CLINK payment requests (kind 21001) and debit requests (kind 21002) over Nostr.
+- Send CLINK offer (21001), debit (21002), manage (21003), and enroll (21004) requests.
+- Fetch a node `clink-node` beacon (kind 30078) for liveness, display, fees, and advertised kinds.
 - NIP-44 encrypted payloads for privacy and security.
 - TypeScript types for all protocol payloads and responses.
 - Simple, high-level API for wallet and service integration.
@@ -202,6 +205,41 @@ sdk.Ndebit(budgetRequest).then(response => {
 });
 ```
 
+### 4. Beacon
+
+Optional. Useful for rich display of node persona (name, avatar, fees, kinds). Recommended for the enroll fast-path: mine at `enroll_difficulty` instead of probing.
+
+```ts
+import { ClinkSDK, generateSecretKey } from '@shocknet/clink-sdk';
+
+const sdk = ClinkSDK.fromNprofile('nprofile1...', generateSecretKey());
+const beacon = await sdk.Nbeacon();
+if (!beacon) throw new Error('no beacon');
+
+console.log(beacon.content.name, beacon.content.fees, beacon.content.supported_kinds);
+sdk.Stop();
+```
+
+### 5. Enroll
+
+Enroll binds your signing key to an account and returns that account's `noffer` / `ndebit` / `nmanage`.
+
+```ts
+import { ClinkSDK, generateSecretKey, decodeBech32 } from '@shocknet/clink-sdk';
+
+const sdk = ClinkSDK.fromNprofile('nprofile1...', generateSecretKey());
+const enrolled = await sdk.Nenroll();
+if (enrolled.res !== 'ok') throw new Error(enrolled.error);
+
+const noffer = decodeBech32(enrolled.noffer);
+if (noffer.type !== 'noffer') throw new Error('expected noffer');
+const invoice = await sdk.Noffer({ offer: noffer.data.offer, amount_sats: 21 });
+
+sdk.Stop();
+```
+
+`Nenroll()` with no args uses a fresh beacon's `enroll_difficulty` when present, otherwise probes and remine once on GFY `5`. Pass `{ difficulty: 0 }` to probe, or `{ difficulty: 18 }` to skip the lookup.
+
 ---
 
 ## API Reference
@@ -210,8 +248,10 @@ sdk.Ndebit(budgetRequest).then(response => {
 
 ```ts
 new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
+ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { defaultTimeoutSeconds?: number, pool?: AbstractSimplePool })
 ```
 - `settings`: `{ privateKey: Uint8Array, relays: string[], toPubKey: string, defaultTimeoutSeconds?: number }`
+- `fromNprofile`: decodes service pubkey + relays from an `nprofile`.
 - `pool`: Optional custom Nostr pool (defaults to `SimplePool` from this package’s pinned `nostr-tools`). If you pass one, build it with `SimplePool` imported from `@shocknet/clink-sdk`.
 
 #### Methods
@@ -225,6 +265,10 @@ new ClinkSDK(settings: ClinkSettings, pool?: AbstractSimplePool)
 - `Nmanage(data: NmanageRequest, timeoutSeconds?: number)`
   - Sends a `kind: 21003` management request.
   - Returns a `Promise<NmanageResponse>` that resolves with the result of the management action.
+- `Nbeacon(timeoutSeconds?: number)`
+  - Fetches the latest kind `30078` `d=clink-node` beacon (liveness, display, fees, advertised kinds).
+- `Nenroll(opts?: { difficulty?: number }, timeoutSeconds?: number)`
+  - Sends a kind `21004` Enroll request (`{}`). Mines NIP-13 when `difficulty > 0`. If `difficulty` is omitted, uses a fresh beacon’s `enroll_difficulty` when present, otherwise probes and remine once on GFY `5`.
 - `Stop()`
   - Closes relay connections on the internal pool. Call when finished so the process can exit cleanly.
 
@@ -274,6 +318,8 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 - **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`
 - **`BudgetFrequency`**: `{ number: number, unit: 'day' | 'week' | 'month' }`
 - **`ClinkSettings`**: `{ privateKey: Uint8Array, relays: string[], toPubKey: string, defaultTimeoutSeconds?: number }`
+- **`NenrollResponse`**: `{ res: 'ok', noffer: string, ndebit: string, nmanage: string } | { res: 'GFY', code: number, error: string, required_difficulty?: number }`
+- **`ClinkBeacon`**: `{ pubkey: string, created_at: number, operator?: string, content: ClinkBeaconContent }`
 - **`AbstractSimplePool`**, **`UnsignedEvent`**: see Nostr helpers above
 
 ---
