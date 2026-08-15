@@ -238,7 +238,7 @@ const invoice = await sdk.Noffer({ offer: noffer.data.offer, amount_sats: 21 });
 sdk.Stop();
 ```
 
-`Nenroll()` with no args uses a fresh beacon's `enroll_difficulty` when present, otherwise probes and remine once on GFY `5`. Pass `{ difficulty: 0 }` to probe, or `{ difficulty: 18 }` to skip the lookup.
+`Nenroll()` with no args uses a fresh beacon's `enroll_difficulty` when present, otherwise probes and remine once on GFY `5`. Pass `{ difficulty: 0 }` to probe, or `{ difficulty: 18 }` to skip the lookup. Mining is capped at `MAX_ENROLL_POW_BITS` (24). A beacon or GFY asking for more is ignored (probe / return the GFY); an explicit `{ difficulty }` above the cap throws.
 
 ---
 
@@ -268,7 +268,7 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
 - `Nbeacon(timeoutSeconds?: number)`
   - Fetches the latest kind `30078` `d=clink-node` beacon (liveness, display, fees, advertised kinds).
 - `Nenroll(opts?: { difficulty?: number }, timeoutSeconds?: number)`
-  - Sends a kind `21004` Enroll request (`{}`). Mines NIP-13 when `difficulty > 0`. If `difficulty` is omitted, uses a fresh beacon’s `enroll_difficulty` when present, otherwise probes and remine once on GFY `5`.
+  - Sends a kind `21004` Enroll request (`{}`). Mines NIP-13 when `difficulty > 0`, up to `MAX_ENROLL_POW_BITS` (24). If `difficulty` is omitted, uses a fresh beacon’s `enroll_difficulty` when present and in range, otherwise probes and remine once on GFY `5`.
 - `Stop()`
   - Closes relay connections on the internal pool. Call when finished so the process can exit cleanly.
 

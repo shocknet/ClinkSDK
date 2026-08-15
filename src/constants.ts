@@ -7,3 +7,5 @@ export const CLINK_BEACON_KIND = 30078
 export const CLINK_BEACON_D_TAG = "clink-node"
 export const BEACON_STALE_AFTER_SECONDS = 180
 export const BEACON_FUTURE_SKEW_SECONDS = 30
+/** Client will not mine more than this many NIP-13 bits (spec recommended: 18). */
+export const MAX_ENROLL_POW_BITS = 24

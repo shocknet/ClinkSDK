@@ -2,7 +2,7 @@ import { nip44, getPublicKey, type UnsignedEvent } from "nostr-tools"
 import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
 import { sendRequest } from "./sender.js"
 import { CLINK_ENROLL_KIND, CLINK_VERSION } from "./constants.js"
-import { mineNip13 } from "./nip13.js"
+import { enrollPowBitsOk, mineNip13 } from "./nip13.js"
 
 const { getConversationKey, encrypt } = nip44
 
@@ -60,12 +60,15 @@ export const SendNenrollRequest = async (
     timeoutSeconds?: number,
 ): Promise<NenrollResponse> => {
     const used = difficulty > 0 ? difficulty : 0
+    if (used > 0 && !enrollPowBitsOk(used)) {
+        throw new Error(`enroll PoW difficulty ${used} exceeds max`)
+    }
     const first = await sendEnrollOnce(pool, privateKey, relays, toPubKey, used, timeoutSeconds)
     if (!isGfy5(first)) {
         return first
     }
     const required = first.required_difficulty
-    if (typeof required !== "number" || !Number.isInteger(required) || required <= used) {
+    if (typeof required !== "number" || !enrollPowBitsOk(required) || required <= used) {
         return first
     }
     return sendEnrollOnce(pool, privateKey, relays, toPubKey, required, timeoutSeconds)

@@ -7,6 +7,7 @@ import {
     CLINK_BEACON_KIND,
     CLINK_VERSION,
 } from "./constants.js"
+import { enrollPowBitsOk } from "./nip13.js"
 
 export type ClinkBeaconFees = { serviceFeeFloor: number, serviceFeeBps: number }
 
@@ -139,7 +140,11 @@ export const enrollDifficultyFromBeacon = (beacon: ClinkBeacon | null, nowMs = D
     if (!beacon || !beaconIsFresh(beacon, nowMs)) {
         return undefined
     }
-    return beacon.content.enroll_difficulty
+    const bits = beacon.content.enroll_difficulty
+    if (bits === undefined || bits === 0 || !enrollPowBitsOk(bits)) {
+        return undefined
+    }
+    return bits
 }
 
 export const FetchClinkBeacon = async (

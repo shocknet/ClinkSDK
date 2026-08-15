@@ -16,6 +16,7 @@ import {
   CLINK_BEACON_D_TAG,
   CLINK_VERSION,
   ClinkSDK,
+  MAX_ENROLL_POW_BITS,
 } from '../../build/index.js'
 
 const { getConversationKey, encrypt } = nip44
@@ -42,6 +43,12 @@ describe('nip13 mining', () => {
     const event = newNenrollEvent('{}', 'ab'.repeat(32), 'cd'.repeat(32))
     assert.equal(mineNip13(event, 0), event)
     assert.equal(event.tags.some(t => t[0] === 'nonce'), false)
+  })
+
+  it('refuses to mine above the client cap', () => {
+    const event = newNenrollEvent('{}', 'ab'.repeat(32), 'cd'.repeat(32))
+    assert.throws(() => mineNip13(event, MAX_ENROLL_POW_BITS + 1))
+    assert.throws(() => mineNip13(event, 64))
   })
 })
 
@@ -106,6 +113,15 @@ describe('beacon parse', () => {
     assert.equal(enrollDifficultyFromBeacon(beacon, now * 1000), 18)
     assert.equal(enrollDifficultyFromBeacon(beacon, (now + 181) * 1000), undefined)
     assert.equal(beaconIsFresh(beacon, (now - 31) * 1000), false)
+  })
+
+  it('keeps huge enroll_difficulty for display but will not mine it', () => {
+    const beacon = parseClinkBeaconEvent(signBeacon({
+      content: JSON.stringify({ enroll_difficulty: 64 }),
+    }))
+    assert.ok(beacon)
+    assert.equal(beacon.content.enroll_difficulty, 64)
+    assert.equal(enrollDifficultyFromBeacon(beacon, now * 1000), undefined)
   })
 
   it('ignores unsigned relay spoofs when fetching', async () => {
@@ -198,5 +214,56 @@ describe('enroll remine', () => {
     const nonce = published[1].tags.find(t => t[0] === 'nonce')
     assert.equal(nonce[2], '8')
     assert.ok(countLeadingZeroBits(published[1].id) >= 8)
+  })
+
+  it('does not remine when GFY 5 asks above the client cap', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+    const published = []
+    let onevent = null
+    const pool = {
+      subscribeMany(_relays, _filters, opts) {
+        onevent = opts.onevent
+        return { close: () => {} }
+      },
+      publish(_relays, event) {
+        published.push(event)
+        const reply = {
+          id: `reply-${published.length}`,
+          kind: CLINK_ENROLL_KIND,
+          pubkey: serverPub,
+          content: encrypt(JSON.stringify({
+            res: 'GFY',
+            code: 5,
+            error: 'Insufficient proof of work',
+            required_difficulty: 64,
+          }), getConversationKey(serverPriv, clientPub)),
+        }
+        queueMicrotask(() => onevent(reply))
+        return [Promise.resolve('ok')]
+      },
+    }
+    const res = await SendNenrollRequest(pool, clientPriv, ['wss://relay.example'], serverPub, 0, 5)
+    assert.equal(res.res, 'GFY')
+    assert.equal(res.code, 5)
+    assert.equal(res.required_difficulty, 64)
+    assert.equal(published.length, 1)
+  })
+
+  it('throws before mining when caller asks above the client cap', async () => {
+    const published = []
+    const pool = {
+      subscribeMany() { return { close: () => {} } },
+      publish(_relays, event) {
+        published.push(event)
+        return [Promise.resolve('ok')]
+      },
+    }
+    await assert.rejects(
+      () => SendNenrollRequest(pool, generateSecretKey(), ['wss://relay.example'], 'cd'.repeat(32), 64, 5),
+    )
+    assert.equal(published.length, 0)
   })
 })
