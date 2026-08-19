@@ -1,0 +1,15 @@
+import { finalizeEvent, nip44 } from 'nostr-tools'
+
+const { getConversationKey, encrypt } = nip44
+
+export const signedClinkReply = (serverPriv, clientPub, requestId, payload, kind, extra = {}) =>
+  finalizeEvent({
+    kind,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ['p', extra.p ?? clientPub],
+      ['e', extra.e ?? requestId],
+      ['clink_version', extra.clinkVersion ?? '1'],
+    ],
+    content: extra.content ?? encrypt(JSON.stringify(payload), getConversationKey(serverPriv, clientPub)),
+  }, serverPriv)

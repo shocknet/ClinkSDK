@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateSecretKey, getPublicKey, finalizeEvent, nip19, nip44 } from 'nostr-tools'
+import { generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools'
+import { signedClinkReply } from './signed-reply.mjs'
 import {
   countLeadingZeroBits,
   mineNip13,
@@ -18,8 +19,6 @@ import {
   ClinkSDK,
   MAX_ENROLL_POW_BITS,
 } from '../../build/index.js'
-
-const { getConversationKey, encrypt } = nip44
 
 describe('nip13 mining', () => {
   it('counts leading zero bits', () => {
@@ -197,12 +196,7 @@ describe('enroll remine', () => {
         const payload = gfy
           ? { res: 'GFY', code: 5, error: 'Insufficient proof of work', required_difficulty: 8 }
           : { res: 'ok', noffer: 'noffer1x', ndebit: 'ndebit1x', nmanage: 'nmanage1x' }
-        const reply = {
-          id: `reply-${published.length}`,
-          kind: CLINK_ENROLL_KIND,
-          pubkey: serverPub,
-          content: encrypt(JSON.stringify(payload), getConversationKey(serverPriv, clientPub)),
-        }
+        const reply = signedClinkReply(serverPriv, clientPub, event.id, payload, CLINK_ENROLL_KIND)
         queueMicrotask(() => onevent(reply))
         return [Promise.resolve('ok')]
       },
@@ -230,17 +224,12 @@ describe('enroll remine', () => {
       },
       publish(_relays, event) {
         published.push(event)
-        const reply = {
-          id: `reply-${published.length}`,
-          kind: CLINK_ENROLL_KIND,
-          pubkey: serverPub,
-          content: encrypt(JSON.stringify({
-            res: 'GFY',
-            code: 5,
-            error: 'Insufficient proof of work',
-            required_difficulty: 64,
-          }), getConversationKey(serverPriv, clientPub)),
-        }
+        const reply = signedClinkReply(serverPriv, clientPub, event.id, {
+          res: 'GFY',
+          code: 5,
+          error: 'Insufficient proof of work',
+          required_difficulty: 64,
+        }, CLINK_ENROLL_KIND)
         queueMicrotask(() => onevent(reply))
         return [Promise.resolve('ok')]
       },

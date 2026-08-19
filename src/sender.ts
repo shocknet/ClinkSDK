@@ -1,5 +1,6 @@
-import { nip44, finalizeEvent, UnsignedEvent } from "nostr-tools"
+import { nip44, finalizeEvent, verifyEvent, UnsignedEvent, type Event } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
+import { CLINK_VERSION } from "./constants.js"
 const { getConversationKey, decrypt } = nip44
 
 let debug = false
@@ -17,11 +18,50 @@ const logError = (...args: unknown[]) => {
     if (debug) console.error(...args)
 }
 
+const firstTag = (tags: string[][], name: string): string | undefined =>
+    tags.find(t => t[0] === name)?.[1]
+
+const hexEq = (a: string, b: string): boolean =>
+    a.toLowerCase() === b.toLowerCase()
+
+type ResponseExpect = {
+    pubkey: string
+    kind: number
+    requestorPub: string
+    requestId: string
+}
+
+/** Accept only a signed CLINK reply from the expected peer, tagged to this request. */
+export const isClinkResponse = (event: Event, expect: ResponseExpect): boolean => {
+    if (event.kind !== expect.kind) {
+        return false
+    }
+    if (!hexEq(event.pubkey, expect.pubkey)) {
+        return false
+    }
+    if (!verifyEvent(event)) {
+        return false
+    }
+    if (firstTag(event.tags, "clink_version") !== CLINK_VERSION) {
+        return false
+    }
+    if (!hexEq(firstTag(event.tags, "p") ?? "", expect.requestorPub)) {
+        return false
+    }
+    return (firstTag(event.tags, "e") ?? "") === expect.requestId
+}
+
 type Pair = { privateKey: Uint8Array, publicKey: string }
 export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relays: string[], toPub: string, e: UnsignedEvent, kindExpected: number, timeoutSeconds?: number, moreCb?: (data: any) => void): Promise<T> => {
     const signed = finalizeEvent(e, pair.privateKey)
     // Wire events use lowercase hex; callers sometimes pass mixed case.
     const expectedPub = toPub.toLowerCase()
+    const expect: ResponseExpect = {
+        pubkey: expectedPub,
+        kind: kindExpected,
+        requestorPub: pair.publicKey,
+        requestId: signed.id,
+    }
     log(`[ClinkSDK] Sending request: kind=${kindExpected}, eventId=${signed.id}, toPub=${expectedPub}, relays=${relays.join(',')}, timeout=${timeoutSeconds}s`)
 
     return new Promise<T>((res, rej) => {
@@ -57,16 +97,14 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         try {
             // Subscribe BEFORE publish — otherwise a fast reply can arrive with no listener
             closer = pool.subscribeMany(relays, [filter], {
-                onevent: async (e) => {
-                    log(`[ClinkSDK] Received response event: kind=${e.kind}, eventId=${e.id}, from=${e.pubkey}`)
-                    // Filter is tag-based only — ignore anyone who is not the expected peer so a
-                    // forged #e/#p event cannot DoS the request by failing decrypt ahead of the real reply.
-                    if (e.pubkey !== expectedPub) {
-                        log(`[ClinkSDK] Ignoring event from unexpected pubkey ${e.pubkey} (expected ${expectedPub})`)
+                onevent: async (event) => {
+                    log(`[ClinkSDK] Received response event: kind=${event.kind}, eventId=${event.id}, from=${event.pubkey}`)
+                    if (!isClinkResponse(event, expect)) {
+                        log(`[ClinkSDK] Ignoring event that is not a valid CLINK response for eventId=${signed.id}`)
                         return
                     }
                     try {
-                        const content = decrypt(e.content, getConversationKey(pair.privateKey, expectedPub))
+                        const content = decrypt(event.content, getConversationKey(pair.privateKey, expectedPub))
                         const parsed = JSON.parse(content)
                         if (!settled) {
                             settled = true
