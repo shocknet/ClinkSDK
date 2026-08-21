@@ -24,6 +24,9 @@ const firstTag = (tags: string[][], name: string): string | undefined =>
 const hexEq = (a: string, b: string): boolean =>
     a.toLowerCase() === b.toLowerCase()
 
+const isPaymentReceipt = (parsed: unknown): parsed is { res: 'ok' } =>
+    typeof parsed === 'object' && parsed !== null && (parsed as { res?: unknown }).res === 'ok'
+
 type ResponseExpect = {
     pubkey: string
     kind: number
@@ -148,17 +151,17 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                                 return
                             }
                             waitForReceipt()
-                        } else {
-                            log(`[ClinkSDK] Additional response received for eventId=${signed.id}, calling moreCb`)
-                            moreCb?.(parsed)
+                        } else if (moreCb && isPaymentReceipt(parsed)) {
+                            log(`[ClinkSDK] Receipt received for eventId=${signed.id}, calling moreCb`)
+                            moreCb(parsed)
                             cleanup()
+                        } else {
+                            log(`[ClinkSDK] Ignoring extra non-receipt event for eventId=${signed.id}`)
                         }
                     } catch (err) {
                         logError(`[ClinkSDK] Failed to decrypt/parse response for eventId=${signed.id}:`, err)
                         if (!settled) {
                             fail(err)
-                        } else {
-                            cleanup()
                         }
                     }
                 },

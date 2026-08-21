@@ -259,7 +259,7 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
   - Sends a `kind: 21001` offer request.
   - Returns a `Promise<NofferResponse>` that resolves with the invoice or an error.
   - The optional `onReceipt` callback is triggered when the invoice is paid. **You must pass the callback as a parameter**—simply defining it is not enough.
-  - While waiting for that receipt, the SDK re-subscribes so a confirmation the relay still has (e.g. after switching to a wallet) is delivered when the page is listening again.
+  - While waiting for that receipt, the SDK re-subscribes so a confirmation the relay still has (e.g. after switching to a wallet) is delivered when the page is listening again. A replayed invoice is ignored; only `{ res: "ok" }` counts as the receipt.
 - `Ndebit(data: NdebitData, timeoutSeconds?: number)`
   - Sends a `kind: 21002` debit request.
   - Returns a `Promise<NdebitResponse>` that resolves with the payment/budget confirmation or an error.
