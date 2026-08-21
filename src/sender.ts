@@ -1,6 +1,7 @@
 import { nip44, finalizeEvent, verifyEvent, UnsignedEvent, type Event } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
 import { CLINK_VERSION } from "./constants.js"
+import { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, decrypt } = nip44
 
 let debug = false
@@ -23,9 +24,6 @@ const firstTag = (tags: string[][], name: string): string | undefined =>
 
 const hexEq = (a: string, b: string): boolean =>
     a.toLowerCase() === b.toLowerCase()
-
-const isPaymentReceipt = (parsed: unknown): parsed is { res: 'ok' } =>
-    typeof parsed === 'object' && parsed !== null && (parsed as { res?: unknown }).res === 'ok'
 
 type ResponseExpect = {
     pubkey: string
@@ -151,7 +149,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                                 return
                             }
                             waitForReceipt()
-                        } else if (moreCb && isPaymentReceipt(parsed)) {
+                        } else if (moreCb && isNofferReceipt(parsed)) {
                             log(`[ClinkSDK] Receipt received for eventId=${signed.id}, calling moreCb`)
                             moreCb(parsed)
                             cleanup()

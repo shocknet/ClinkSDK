@@ -47,6 +47,8 @@ export type OfferPointer = {
   offer: string
   priceType: OfferPriceType,
   price?: number
+  /** TLV 5 — ISO-style currency code. Requires Variable price type and excludes TLV 4. */
+  currency?: string
 }
 export enum OfferPriceType {
   Fixed = 0,
@@ -84,24 +86,8 @@ export function decodeBech32(nip19: string): DecodeResult {
   let data = new Uint8Array(bech32.fromWords(words))
 
   switch (prefix) {
-    case 'noffer': {
-      const tlv = parseTLV(data)
-      if (!tlv[0]?.[0]) throw new Error('missing TLV 0 for noffer')
-      if (tlv[0][0].length !== 32) throw new Error('TLV 0 should be 32 bytes')
-      if (!tlv[1]?.[0]) throw new Error('missing TLV 1 for noffer')
-      if (!tlv[2]?.[0]) throw new Error('missing TLV 2 for noffer')
-      if (!tlv[3]?.[0]) throw new Error('missing TLV 3 for noffer')
-      return {
-        type: 'noffer',
-        data: {
-          pubkey: bytesToHex(tlv[0][0]),
-          relay: utf8Decoder.decode(tlv[1][0]),
-          offer: utf8Decoder.decode(tlv[2][0]),
-          priceType: tlv[3][0][0],
-          price: tlv[4] ? parseInt(bytesToHex(tlv[4][0]), 16) : undefined
-        }
-      }
-    }
+    case 'noffer':
+      return { type: 'noffer', data: decodeNofferTlv(parseTLV(data)) }
     case 'ndebit': {
       const tlv = parseTLV(data)
       if (!tlv[0]?.[0]) throw new Error('missing TLV 0 for ndebit')
@@ -139,6 +125,58 @@ export function decodeBech32(nip19: string): DecodeResult {
 
 type TLV = { [t: number]: Uint8Array[] }
 
+const tlvValue = (tlv: TLV, tag: number): Uint8Array | undefined => tlv[tag]?.[0]
+
+const requireTlv = (tlv: TLV, tag: number, kind: string, length?: number): Uint8Array => {
+  const value = tlvValue(tlv, tag)
+  if (!value) throw new Error(`missing TLV ${tag} for ${kind}`)
+  if (length !== undefined && value.length !== length) throw new Error(`TLV ${tag} should be ${length} bytes`)
+  return value
+}
+
+const optionalUtf8 = (tlv: TLV, tag: number): string | undefined => {
+  const value = tlvValue(tlv, tag)
+  return value ? utf8Decoder.decode(value) : undefined
+}
+
+const nofferPriceType = (tlv: TLV, price?: number, currency?: string): OfferPriceType => {
+  const raw = tlvValue(tlv, 3)
+  if (raw) {
+    if (raw.length !== 1) throw new Error('TLV 3 should be 1 byte')
+    const flag = raw[0]
+    if (flag !== OfferPriceType.Fixed && flag !== OfferPriceType.Variable && flag !== OfferPriceType.Spontaneous) {
+      throw new Error('TLV 3 must be 0, 1, or 2')
+    }
+    return flag
+  }
+  if (currency) return OfferPriceType.Variable
+  if (price !== undefined) return OfferPriceType.Fixed
+  return OfferPriceType.Spontaneous
+}
+
+const decodeNofferTlv = (tlv: TLV): OfferPointer => {
+  const pubkey = requireTlv(tlv, 0, 'noffer', 32)
+  const relay = requireTlv(tlv, 1, 'noffer')
+  const offer = requireTlv(tlv, 2, 'noffer')
+  const priceRaw = tlvValue(tlv, 4)
+  const price = priceRaw ? parseInt(bytesToHex(priceRaw), 16) : undefined
+  const currency = optionalUtf8(tlv, 5)
+  if (currency && price !== undefined) throw new Error('noffer currency excludes price')
+  const priceType = nofferPriceType(tlv, price, currency)
+  if (currency && priceType !== OfferPriceType.Variable) {
+    throw new Error('noffer currency requires variable price type')
+  }
+  const data: OfferPointer = {
+    pubkey: bytesToHex(pubkey),
+    relay: utf8Decoder.decode(relay),
+    offer: utf8Decoder.decode(offer),
+    priceType,
+    price,
+  }
+  if (currency) data.currency = currency
+  return data
+}
+
 function parseTLV(data: Uint8Array): TLV {
   let result: TLV = {}
   let rest = data
@@ -156,6 +194,14 @@ function parseTLV(data: Uint8Array): TLV {
 
 
 export const nofferEncode = (offer: OfferPointer): string => {
+  if (offer.currency) {
+    if (offer.priceType !== OfferPriceType.Variable) {
+      throw new Error('noffer currency requires variable price type')
+    }
+    if (offer.price) {
+      throw new Error('noffer currency excludes price')
+    }
+  }
   const o: TLV = {
     0: [hexToBytes(offer.pubkey)],
     1: [utf8Encoder.encode(offer.relay)],
@@ -164,6 +210,9 @@ export const nofferEncode = (offer: OfferPointer): string => {
   }
   if (offer.price) {
     o[4] = [integerToUint8Array(offer.price)]
+  }
+  if (offer.currency) {
+    o[5] = [utf8Encoder.encode(offer.currency)]
   }
   const data = encodeTLV(o)
   const words = bech32.toWords(data)

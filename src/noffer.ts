@@ -1,6 +1,10 @@
 import { nip44, getPublicKey } from "nostr-tools"
 import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import { CLINK_OFFER_KIND, CLINK_VERSION } from "./constants.js"
+import { type NofferReceipt } from "./receipt.js"
 import { sendRequest } from "./sender.js"
+export type { NofferReceipt } from "./receipt.js"
+export { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, encrypt } = nip44
 
 export type NofferData = {
@@ -26,9 +30,8 @@ export const validateNofferData = (data: unknown): NofferData => {
 }
 
 export type NofferSuccess = { bolt11: string }
-export type NofferError = { code: number, error: string, range?: { min: number, max: number } }
+export type NofferError = { code: number, error: string, range?: { min: number, max: number }, latest?: string }
 export type NofferResponse = NofferSuccess | NofferError
-export type NofferReceipt = { res: 'ok' }
 
 export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
     if (data.description && data.description.length > 100) {
@@ -37,20 +40,20 @@ export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Ui
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, toPubKey))
     const event = newNofferEvent(content, publicKey, toPubKey)
-    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, 21001, timeoutSeconds, onReceipt)
+    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, CLINK_OFFER_KIND, timeoutSeconds, onReceipt)
 }
 
 export const newNofferEvent = (content: string, fromPub: string, toPub: string) => ({
     content,
     created_at: Math.floor(Date.now() / 1000),
-    kind: 21001,
+    kind: CLINK_OFFER_KIND,
     pubkey: fromPub,
-    tags: [['p', toPub], ['clink_version', '1']]
+    tags: [['p', toPub], ['clink_version', CLINK_VERSION]]
 })
 
 export const newNofferFilter = (publicKey: string, eventId: string) => ({
     since: Math.floor(Date.now() / 1000) - 1,
-    kinds: [21001],
+    kinds: [CLINK_OFFER_KIND],
     '#p': [publicKey],
     '#e': [eventId]
 })

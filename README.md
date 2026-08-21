@@ -119,7 +119,7 @@ const request: NofferData = {
 
 // Optional: Pass a receipt callback to be notified when the invoice is paid
 const receiptCallback = (receipt) => {
-  console.log("got receipt", receipt); // receipt will be { res: 'ok' }
+  console.log("got receipt", receipt); // { res: 'ok' } or { res: 'ok', preimage: '...' }
 };
 sdk.Noffer(request, receiptCallback).then(response => {
   if ('bolt11' in response) {
@@ -259,7 +259,7 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
   - Sends a `kind: 21001` offer request.
   - Returns a `Promise<NofferResponse>` that resolves with the invoice or an error.
   - The optional `onReceipt` callback is triggered when the invoice is paid. **You must pass the callback as a parameter**—simply defining it is not enough.
-  - While waiting for that receipt, the SDK re-subscribes so a confirmation the relay still has (e.g. after switching to a wallet) is delivered when the page is listening again. A replayed invoice is ignored; only `{ res: "ok" }` counts as the receipt.
+  - While waiting for that receipt, the SDK re-subscribes so a confirmation the relay still has (e.g. after switching to a wallet) is delivered when the page is listening again. A replayed invoice is ignored; only `{ res: "ok" }` (optional `preimage`) counts as the receipt.
 - `Ndebit(data: NdebitData, timeoutSeconds?: number)`
   - Sends a `kind: 21002` debit request.
   - Returns a `Promise<NdebitResponse>` that resolves with the payment/budget confirmation or an error.
@@ -281,6 +281,7 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
 - `decodeBech32(nip19: string): DecodeResult`
 - `generateK1(): string` — 32-byte session identifier as lowercase hex (ndebit TLV `3`)
 - `validateK1(k1: unknown): string` — throws unless `k1` is 64 lowercase hex chars; returns it unchanged
+- `isNofferReceipt(parsed: unknown): parsed is NofferReceipt` — `{ res: "ok" }` with optional 64-char hex `preimage`
 
 ### Validators
 
@@ -310,11 +311,11 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 
 ### Types
 - **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: Record<string, string> }`
-- **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number } }`
-- **`NofferReceipt`**: `{ res: 'ok' }` - The receipt object sent when an invoice is paid
+- **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number }, latest?: string }`
+- **`NofferReceipt`**: `{ res: 'ok', preimage?: string }` — Lightning receipts include `preimage`; internal settlement omits it
 - **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string, description?: string }`
 - **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number }`
-- **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number }`
+- **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number, currency?: string }`
 - **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string, k1?: string }`
 - **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`
 - **`BudgetFrequency`**: `{ number: number, unit: 'day' | 'week' | 'month' }`

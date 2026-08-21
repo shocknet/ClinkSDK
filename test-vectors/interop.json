@@ -12,8 +12,9 @@
       "0": "pubkey (32 bytes raw)",
       "1": "relay (utf8)",
       "2": "offer id (utf8)",
-      "3": "priceType (1 byte: 0=Fixed, 1=Variable, 2=Spontaneous)",
-      "4": "price (optional, 4-byte big-endian uint32)"
+      "3": "priceType (optional, 1 byte: 0=Fixed, 1=Variable, 2=Spontaneous; omit with TLV 4/5 absent ⇒ Spontaneous)",
+      "4": "price (optional, 4-byte big-endian uint32; omit when TLV 5 is present)",
+      "5": "currency (optional utf8, e.g. USD; requires Variable and excludes TLV 4)"
     },
     "ndebit": {
       "0": "pubkey (32 bytes raw)",
