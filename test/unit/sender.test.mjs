@@ -31,10 +31,14 @@ function createMockPool({ onSubscribe, onPublish, replyFactory }) {
   return {
     order,
     wasClosed: () => closed,
+    subscribeCount: () => order.filter(item => item === 'subscribe').length,
     subscribeMany(relays, filters, opts) {
+      if (!subscribeCalled) {
+        assert.equal(publishCalled, false, 'subscribe must happen before publish')
+      }
       subscribeCalled = true
+      closed = false
       order.push('subscribe')
-      assert.equal(publishCalled, false, 'subscribe must happen before publish')
       onSubscribe?.(relays, filters, opts)
       onevent = opts.onevent
       return {
@@ -125,6 +129,40 @@ describe('sender lifecycle', () => {
     assert.equal(pool.wasClosed(), false)
 
     await onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001))
+
+    assert.deepEqual(receipt, { res: 'ok' })
+    assert.equal(pool.wasClosed(), true)
+  })
+
+  it('resubscribes after close and still delivers the receipt', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    let latest = { onevent: null, onclose: null }
+    let requestId = null
+    const pool = createMockPool({
+      onSubscribe: (_r, _f, opts) => {
+        latest = opts
+      },
+      replyFactory: (request) => {
+        requestId = request.id
+        return [signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21001)]
+      },
+    })
+
+    let receipt = null
+    await sendOffer(pool, clientPriv, clientPub, serverPub, 5, (data) => {
+      receipt = data
+    })
+
+    assert.equal(pool.subscribeCount(), 1)
+    latest.onclose(['closed'])
+    await new Promise(resolve => setTimeout(resolve, 600))
+    assert.ok(pool.subscribeCount() >= 2)
+
+    await latest.onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001))
 
     assert.deepEqual(receipt, { res: 'ok' })
     assert.equal(pool.wasClosed(), true)
