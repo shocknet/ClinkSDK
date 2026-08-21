@@ -204,6 +204,40 @@ describe('sender lifecycle', () => {
     assert.equal(pool.wasClosed(), true)
   })
 
+  it('does not treat a non-ok res payload as a receipt', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    let onevent = null
+    let requestId = null
+    const pool = createMockPool({
+      onSubscribe: (_r, _f, opts) => {
+        onevent = opts.onevent
+      },
+      replyFactory: (request) => {
+        requestId = request.id
+        return [signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21001)]
+      },
+    })
+
+    let receipt = null
+    await sendOffer(pool, clientPriv, clientPub, serverPub, 5, (data) => {
+      receipt = data
+    })
+
+    await onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'GFY', error: 'no' }, 21001))
+
+    assert.equal(receipt, null)
+    assert.equal(pool.wasClosed(), false)
+
+    await onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001))
+
+    assert.deepEqual(receipt, { res: 'ok' })
+    assert.equal(pool.wasClosed(), true)
+  })
+
   it('rejects on decrypt failure from a verified peer reply', async () => {
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)

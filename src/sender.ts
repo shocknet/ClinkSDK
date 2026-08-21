@@ -24,8 +24,8 @@ const firstTag = (tags: string[][], name: string): string | undefined =>
 const hexEq = (a: string, b: string): boolean =>
     a.toLowerCase() === b.toLowerCase()
 
-const isPaymentReceipt = (parsed: unknown): parsed is { res: string } =>
-    typeof parsed === 'object' && parsed !== null && 'res' in parsed
+const isPaymentReceipt = (parsed: unknown): parsed is { res: 'ok' } =>
+    typeof parsed === 'object' && parsed !== null && (parsed as { res?: unknown }).res === 'ok'
 
 type ResponseExpect = {
     pubkey: string
