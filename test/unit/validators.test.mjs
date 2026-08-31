@@ -11,6 +11,12 @@ import {
   newCreateRequest,
   newListRequest,
   newGetRequest,
+  gfy6Reason,
+  SendNdebitRequest,
+  generateSecretKey,
+  newNdebitFullAccessRequest,
+  newNdebitPaymentRequest,
+  newNdebitBudgetRequest,
 } from '../../build/index.js'
 
 describe('validators', () => {
@@ -19,6 +25,13 @@ describe('validators', () => {
     assert.equal(validateK1(k1), k1)
     assert.throws(() => validateK1(k1.toUpperCase()))
     assert.throws(() => validateK1('short'))
+  })
+
+  it('exports gfy6 reason tokens', () => {
+    assert.equal(gfy6Reason.k1AlreadyProcessed, 'k1_already_processed')
+    assert.equal(gfy6Reason.invoiceInProgress, 'invoice_in_progress')
+    assert.equal(gfy6Reason.invoiceAlreadyFailed, 'invoice_already_failed')
+    assert.equal(gfy6Reason.invoiceAlreadyPaid, 'invoice_already_paid')
   })
 
   it('validates budget frequency', () => {
@@ -40,6 +53,42 @@ describe('validators', () => {
     assert.throws(() => validateNdebitData({ bolt11: 1 }))
     assert.throws(() => validateNdebitData({ description: 'x'.repeat(101) }))
     assert.throws(() => validateNdebitData({ k1: 'bad' }))
+    assert.throws(() => validateNdebitData({ pointer: 'p', k1 }))
+    assert.throws(() => validateNdebitData({
+      pointer: 'p',
+      k1,
+      amount_sats: 500,
+      frequency: { number: 1, unit: 'day' },
+    }))
+    assert.throws(() => validateNdebitData([]))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: 21, frequency: { number: 1, unit: 'day' } }))
+    assert.throws(() => validateNdebitData({ frequency: { number: 1, unit: 'day' } }))
+    assert.throws(() => validateNdebitData({ bolt11: '' }))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: 0 }))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: -1 }))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: 1.5 }))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: Number.NaN }))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: Number.POSITIVE_INFINITY }))
+    assert.throws(() => validateNdebitData({ bolt11: 'lnbc1', amount_sats: Number.MAX_SAFE_INTEGER + 1 }))
+    assert.throws(() => newNdebitBudgetRequest({ number: 1, unit: 'day' }, 0))
+  })
+
+  it('treats undefined optional fields as omitted', () => {
+    assert.deepEqual(validateNdebitData(newNdebitFullAccessRequest()), {})
+    assert.deepEqual(validateNdebitData(newNdebitPaymentRequest('lnbc1')), { bolt11: 'lnbc1' })
+    assert.deepEqual(
+      validateNdebitData(newNdebitBudgetRequest({ number: 1, unit: 'day' }, 500)),
+      { amount_sats: 500, frequency: { number: 1, unit: 'day' } },
+    )
+    assert.deepEqual(validateNdebitData({ pointer: undefined, bolt11: 'lnbc1' }), { bolt11: 'lnbc1' })
+  })
+
+  it('SendNdebitRequest validates before sending', async () => {
+    const k1 = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    await assert.rejects(
+      SendNdebitRequest({}, generateSecretKey(), [], 'aa'.repeat(32), { pointer: 'p', k1 }),
+      /k1 requires a bolt11 payment request/,
+    )
   })
 
   it('validates noffer data', () => {
