@@ -433,7 +433,7 @@ describe('sender lifecycle', () => {
 
     await assert.rejects(
       () => sendOffer(pool, clientPriv, clientPub, serverPub, 0.05),
-      /failed to get response in time/
+      (err) => err instanceof Error && err.message === 'failed to get response in time'
     )
     assert.equal(pool.wasClosed(), true)
   })
