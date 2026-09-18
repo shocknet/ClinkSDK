@@ -140,6 +140,7 @@ import {
   newNdebitPaymentRequest,
   newNdebitFullAccessRequest,
   newNdebitBudgetRequest,
+  gfy6Reason,
 } from '@shocknet/clink-sdk';
 
 // Session flow: scan ndebit QR, pay with matching k1
@@ -178,7 +179,17 @@ sdk.Ndebit(simplePaymentRequest).then(response => {
       console.log('Payment settled internally.');
     }
   } else if (response.res === 'GFY') {
-    console.error('Debit error:', response.error);
+    if (response.reason === gfy6Reason.invoiceAlreadyFailed) {
+      console.error('Submit a new invoice')
+    } else if (response.reason === gfy6Reason.k1AlreadyProcessed) {
+      console.error('Session already used')
+    } else if (response.reason === gfy6Reason.invoiceInProgress) {
+      console.error('Wait for the in-flight payment')
+    } else if (response.reason === gfy6Reason.invoiceAlreadyPaid) {
+      console.error('Invoice already paid')
+    } else {
+      console.error('Debit error:', response.code, response.error)
+    }
   }
 });
 
@@ -281,6 +292,7 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
 - `decodeBech32(nip19: string): DecodeResult`
 - `generateK1(): string` — 32-byte session identifier as lowercase hex (ndebit TLV `3`)
 - `validateK1(k1: unknown): string` — throws unless `k1` is 64 lowercase hex chars; returns it unchanged
+- `gfy6Reason` — GFY code 6 `reason` tokens (`k1_already_processed`, `invoice_in_progress`, `invoice_already_failed`, `invoice_already_paid`)
 - `isNofferReceipt(parsed: unknown): parsed is NofferReceipt` — `{ res: "ok" }` with optional 64-char hex `preimage`
 
 ### Validators
@@ -314,7 +326,7 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 - **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number }, latest?: string }`
 - **`NofferReceipt`**: `{ res: 'ok', preimage?: string }` — Lightning receipts include `preimage`; internal settlement omits it
 - **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string, description?: string }`
-- **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number }`
+- **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number, reason?: Gfy6Reason, delta?: { max_delta_ms: number, actual_delta_ms: number }, retry_after?: number, range?: { min: number, max: number } }`
 - **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number, currency?: string }`
 - **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string, k1?: string }`
 - **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`

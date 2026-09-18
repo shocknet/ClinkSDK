@@ -1,6 +1,5 @@
 import { nip44, finalizeEvent, verifyEvent, UnsignedEvent, type Event } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
-import { CLINK_VERSION } from "./constants.js"
 import { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, decrypt } = nip44
 
@@ -25,6 +24,13 @@ const firstTag = (tags: string[][], name: string): string | undefined =>
 const hexEq = (a: string, b: string): boolean =>
     a.toLowerCase() === b.toLowerCase()
 
+const SUPPORTED_CLINK_VERSION = '1'
+
+export const isSupportedClinkVersion = (tags: string[][]): boolean => {
+    const versions = tags.filter(t => t[0] === 'clink_version').map(t => t[1])
+    return versions.length === 0 || versions.every(v => v === SUPPORTED_CLINK_VERSION)
+}
+
 type ResponseExpect = {
     pubkey: string
     kind: number
@@ -32,7 +38,7 @@ type ResponseExpect = {
     requestId: string
 }
 
-/** Accept only a signed CLINK reply from the expected peer, tagged to this request. */
+/** Accept a signed CLINK v1 reply, including legacy events with no version tag. */
 export const isClinkResponse = (event: Event, expect: ResponseExpect): boolean => {
     if (event.kind !== expect.kind) {
         return false
@@ -43,13 +49,13 @@ export const isClinkResponse = (event: Event, expect: ResponseExpect): boolean =
     if (!verifyEvent(event)) {
         return false
     }
-    if (firstTag(event.tags, "clink_version") !== CLINK_VERSION) {
-        return false
-    }
     if (!hexEq(firstTag(event.tags, "p") ?? "", expect.requestorPub)) {
         return false
     }
-    return (firstTag(event.tags, "e") ?? "") === expect.requestId
+    if ((firstTag(event.tags, "e") ?? "") !== expect.requestId) {
+        return false
+    }
+    return isSupportedClinkVersion(event.tags)
 }
 
 type Pair = { privateKey: Uint8Array, publicKey: string }

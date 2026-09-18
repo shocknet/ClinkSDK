@@ -93,9 +93,9 @@ export const parseClinkBeaconContent = (raw: unknown): ClinkBeaconContent => {
     return content
 }
 
-const dTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "d")?.[1]
-const versionTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "clink_version")?.[1]
-const operatorTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "operator")?.[1]
+const dTagValues = (tags: string[][]): string[] => tags.filter(t => t[0] === "d" && t[1]).map(t => t[1])
+const versionTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "clink_version" && t[1])?.[1]
+const operatorTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "operator" && t[1])?.[1]
 
 export const parseClinkBeaconEvent = (event: Event): ClinkBeacon | null => {
     if (!verifyEvent(event)) {
@@ -104,7 +104,7 @@ export const parseClinkBeaconEvent = (event: Event): ClinkBeacon | null => {
     if (event.kind !== CLINK_BEACON_KIND) {
         return null
     }
-    if (dTag(event.tags) !== CLINK_BEACON_D_TAG) {
+    if (!dTagValues(event.tags).includes(CLINK_BEACON_D_TAG)) {
         return null
     }
     if (versionTag(event.tags) !== CLINK_VERSION) {

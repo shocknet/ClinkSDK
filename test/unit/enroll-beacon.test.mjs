@@ -100,6 +100,15 @@ describe('beacon parse', () => {
     })), null)
   })
 
+  it('accepts clink-node alongside a legacy d-tag', () => {
+    const beacon = parseClinkBeaconEvent(signBeacon({
+      tags: [['d', 'Lightning.Pub'], ['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION]],
+      content: JSON.stringify({ enroll_difficulty: 18 }),
+    }))
+    assert.ok(beacon)
+    assert.equal(enrollDifficultyFromBeacon(beacon, now * 1000), 18)
+  })
+
   it('uses enroll_difficulty only while the beacon is fresh', () => {
     const beacon = parseClinkBeaconEvent(signBeacon({
       tags: [['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION], ['operator', 'CD'.repeat(32)]],
