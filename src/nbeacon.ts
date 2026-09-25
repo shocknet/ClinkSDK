@@ -1,4 +1,4 @@
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { Event, verifyEvent } from "nostr-tools"
 import {
     BEACON_FUTURE_SKEW_SECONDS,
@@ -168,11 +168,11 @@ export const FetchClinkBeacon = async (
             resolve(best ? parseClinkBeaconEvent(best) : null)
         }
         const timer = setTimeout(finish, timeoutSeconds * 1000)
-        closer = pool.subscribeMany(relays, [{
+        closer = pool.subscribeMany(relays, {
             kinds: [CLINK_BEACON_KIND],
             authors: [expectedPub],
             "#d": [CLINK_BEACON_D_TAG],
-        }], {
+        }, {
             onevent: (event: Event) => {
                 if (event.pubkey.toLowerCase() !== expectedPub) {
                     return

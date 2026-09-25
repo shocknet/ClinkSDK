@@ -1,5 +1,5 @@
 import { nip44, getPublicKey } from "nostr-tools"
-import { AbstractSimplePool } from "nostr-tools/abstract-pool"
+import { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { CLINK_OFFER_KIND, CLINK_VERSION } from "./constants.js"
 import { type NofferReceipt } from "./receipt.js"
 import { sendRequest } from "./sender.js"
