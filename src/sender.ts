@@ -1,5 +1,5 @@
 import { nip44, finalizeEvent, verifyEvent, UnsignedEvent, type Event } from "nostr-tools"
-import { AbstractSimplePool, SubCloser } from "nostr-tools/abstract-pool"
+import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/abstract-pool"
 import { CLINK_VERSION } from "./constants.js"
 import { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, decrypt } = nip44
@@ -126,7 +126,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             const gen = ++listenGen
             log(`[ClinkSDK] Setting up subscription with filter:`, JSON.stringify(filter, null, 2))
             closer.close()
-            closer = pool.subscribeMany(relays, [filter], {
+            closer = pool.subscribeMany(relays, filter, {
                 onevent: async (event) => {
                     log(`[ClinkSDK] Received response event: kind=${event.kind}, eventId=${event.id}, from=${event.pubkey}`)
                     if (!isClinkResponse(event, expect)) {
