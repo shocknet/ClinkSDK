@@ -1,5 +1,5 @@
 import { nip44, finalizeEvent, verifyEvent, UnsignedEvent, type Event } from "nostr-tools"
-import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
+import { AbstractSimplePool, SubCloser } from "nostr-tools/abstract-pool"
 import { CLINK_VERSION } from "./constants.js"
 import { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, decrypt } = nip44

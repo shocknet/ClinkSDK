@@ -1,5 +1,5 @@
 import { nip44, getPublicKey } from "nostr-tools"
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import { AbstractSimplePool } from "nostr-tools/abstract-pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, encrypt } = nip44
 
