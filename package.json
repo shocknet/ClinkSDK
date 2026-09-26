@@ -1,6 +1,6 @@
 {
     "name": "@shocknet/clink-sdk",
-    "version": "1.7.3",
+    "version": "1.8.0",
     "description": "sdk client for clink",
     "repository": {
         "type": "git",
@@ -46,8 +46,8 @@
     ],
     "dependencies": {
         "@noble/hashes": "^1.8.0",
-        "@scure/base": "^1.2.5",
-        "nostr-tools": "2.15.1"
+        "@scure/base": "^2.4.0",
+        "nostr-tools": "2.25.2"
     },
     "devDependencies": {
         "@types/node": "^22.15.2",
