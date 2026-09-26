@@ -32,14 +32,14 @@ function createMockPool({ onSubscribe, onPublish, replyFactory }) {
     order,
     wasClosed: () => closed,
     subscribeCount: () => order.filter(item => item === 'subscribe').length,
-    subscribeMany(relays, filters, opts) {
+    subscribe(relays, filter, opts) {
       if (!subscribeCalled) {
         assert.equal(publishCalled, false, 'subscribe must happen before publish')
       }
       subscribeCalled = true
       closed = false
       order.push('subscribe')
-      onSubscribe?.(relays, filters, opts)
+      onSubscribe?.(relays, filter, opts)
       onevent = opts.onevent
       return {
         close: () => {

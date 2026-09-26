@@ -1,4 +1,4 @@
-import { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
+import type { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { SimplePool, getPublicKey, nip19, generateSecretKey, finalizeEvent, nip44, verifyEvent, type UnsignedEvent } from "nostr-tools"
 import { SendNofferRequest, NofferData, NofferReceipt } from "./noffer.js"
 import { NdebitData, SendNdebitRequest, generateK1, validateK1, newNdebitBudgetRequest, newNdebitPaymentRequest } from "./ndebit.js"
