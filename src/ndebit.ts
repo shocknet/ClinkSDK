@@ -1,6 +1,6 @@
 import { randomBytes, bytesToHex } from '@noble/hashes/utils'
 import { nip44, getPublicKey } from "nostr-tools"
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import type { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, encrypt } = nip44
 
