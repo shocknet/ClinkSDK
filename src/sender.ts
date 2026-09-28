@@ -179,7 +179,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         if (timeoutSeconds) {
             timer = setTimeout(() => {
                 log(`[ClinkSDK] Timeout after ${timeoutSeconds}s - no response received for kind=${kindExpected}, eventId=${signed.id}`)
-                fail('failed to get response in time')
+                fail(new Error('failed to get response in time'))
             }, timeoutSeconds * 1000)
         }
 
