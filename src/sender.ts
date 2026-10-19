@@ -132,7 +132,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             const gen = ++listenGen
             log(`[ClinkSDK] Setting up subscription with filter:`, JSON.stringify(filter, null, 2))
             closer.close()
-            closer = pool.subscribeMany(relays, [filter], {
+            closer = pool.subscribe(relays, filter, {
                 onevent: async (event) => {
                     log(`[ClinkSDK] Received response event: kind=${event.kind}, eventId=${event.id}, from=${event.pubkey}`)
                     if (!isClinkResponse(event, expect)) {

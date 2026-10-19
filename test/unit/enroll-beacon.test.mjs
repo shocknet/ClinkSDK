@@ -147,7 +147,7 @@ describe('beacon parse', () => {
       sig: '11'.repeat(64),
     }
     const pool = {
-      subscribeMany(_relays, _filters, opts) {
+      subscribe(_relays, _filter, opts) {
         queueMicrotask(() => {
           opts.onevent(spoof)
           opts.onevent(signed)
@@ -195,7 +195,7 @@ describe('enroll remine', () => {
     const published = []
     let onevent = null
     const pool = {
-      subscribeMany(_relays, _filters, opts) {
+      subscribe(_relays, _filter, opts) {
         onevent = opts.onevent
         return { close: () => {} }
       },
@@ -227,7 +227,7 @@ describe('enroll remine', () => {
     const published = []
     let onevent = null
     const pool = {
-      subscribeMany(_relays, _filters, opts) {
+      subscribe(_relays, _filter, opts) {
         onevent = opts.onevent
         return { close: () => {} }
       },
@@ -253,7 +253,7 @@ describe('enroll remine', () => {
   it('throws before mining when caller asks above the client cap', async () => {
     const published = []
     const pool = {
-      subscribeMany() { return { close: () => {} } },
+      subscribe() { return { close: () => {} } },
       publish(_relays, event) {
         published.push(event)
         return [Promise.resolve('ok')]

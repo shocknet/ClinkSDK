@@ -12,6 +12,8 @@ import {
   nmanageEncode,
   OfferPriceType,
   isNofferReceipt,
+  nip19,
+  ClinkSDK,
 } from '../../build/index.js'
 
 const fixtures = JSON.parse(
@@ -126,6 +128,35 @@ describe('bech32 round-trip', () => {
     assert.equal(result.data.price, undefined)
     assert.throws(() => nofferEncode({ ...pointer, price: 21 }))
     assert.throws(() => nofferEncode({ ...pointer, priceType: OfferPriceType.Fixed }))
+  })
+})
+
+const withKelvinSign = (encoded) => {
+  const upper = encoded.toUpperCase()
+  const at = upper.indexOf('K', upper.lastIndexOf('1') + 1)
+  return at < 0 ? null : upper.slice(0, at) + '\u212A' + upper.slice(at + 1)
+}
+
+const nprofileWithK = () => {
+  for (let n = 0; ; n++) {
+    const encoded = nip19.nprofileEncode({ pubkey: n.toString(16).padStart(64, 'b'), relays: ['wss://relay.example'] })
+    if (withKelvinSign(encoded)) return encoded
+  }
+}
+
+describe('nip19 decode', () => {
+  it('rejects non-ASCII look-alike characters', () => {
+    const encoded = nprofileWithK()
+    assert.equal(nip19.decode(encoded).type, 'nprofile')
+    assert.equal(nip19.decode(encoded.toUpperCase()).type, 'nprofile')
+    assert.throws(() => nip19.decode(withKelvinSign(encoded)))
+    assert.throws(() => ClinkSDK.fromNprofile(withKelvinSign(encoded), new Uint8Array(32)))
+  })
+
+  it('rejects the same trick in noffer decode', () => {
+    const encoded = withKelvinSign(fixtures.noffer.encoded) ?? withKelvinSign(nmanageEncode(fixtures.nmanage.decoded))
+    assert.ok(encoded)
+    assert.throws(() => decodeBech32(encoded))
   })
 })
 

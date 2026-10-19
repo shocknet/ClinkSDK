@@ -1,5 +1,5 @@
 import { nip44, getPublicKey, type UnsignedEvent } from "nostr-tools"
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import type { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { sendRequest } from "./sender.js"
 import { CLINK_ENROLL_KIND, CLINK_VERSION } from "./constants.js"
 import { enrollPowBitsOk, mineNip13 } from "./nip13.js"
