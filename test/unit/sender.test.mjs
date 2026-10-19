@@ -388,7 +388,23 @@ describe('sender lifecycle', () => {
     assert.deepEqual(result, { bolt11: 'lnbc1dummy' })
   })
 
-  it('ignores a signed reply with an unsupported clink_version', async () => {
+  it('accepts a signed reply with no clink_version', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    const pool = createMockPool({
+      replyFactory: (request) => [
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1legacy' }, 21001, { omitClinkVersion: true }),
+      ],
+    })
+
+    const result = await sendOffer(pool, clientPriv, clientPub, serverPub)
+    assert.deepEqual(result, { bolt11: 'lnbc1legacy' })
+  })
+
+  it('ignores a signed reply with explicit unsupported clink_version', async () => {
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
     const serverPriv = generateSecretKey()
@@ -397,12 +413,29 @@ describe('sender lifecycle', () => {
     const pool = createMockPool({
       replyFactory: (request) => [
         signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'v2' }, 21001, { clinkVersion: '2' }),
-        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21001),
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1v1' }, 21001),
       ],
     })
 
     const result = await sendOffer(pool, clientPriv, clientPub, serverPub)
-    assert.deepEqual(result, { bolt11: 'lnbc1dummy' })
+    assert.deepEqual(result, { bolt11: 'lnbc1v1' })
+  })
+
+  it('ignores a signed reply with mixed clink_version tags', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    const pool = createMockPool({
+      replyFactory: (request) => [
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'mixed' }, 21001, { extraTags: [['clink_version', '2']] }),
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1v1' }, 21001),
+      ],
+    })
+
+    const result = await sendOffer(pool, clientPriv, clientPub, serverPub)
+    assert.deepEqual(result, { bolt11: 'lnbc1v1' })
   })
 
   it('matches peer pubkey case-insensitively', async () => {
