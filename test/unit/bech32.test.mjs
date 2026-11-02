@@ -127,6 +127,14 @@ describe('bech32 round-trip', () => {
     assert.throws(() => nofferEncode({ ...pointer, price: 21 }))
     assert.throws(() => nofferEncode({ ...pointer, priceType: OfferPriceType.Fixed }))
   })
+
+  it('rejects a TLV that has a tag but no length byte', () => {
+    // noffer1qq225w60 decodes to a single payload byte [0]: tag, no length/value.
+    // Without a length-header check, parseTLV would slice(NaN) and loop forever.
+    assert.throws(() => decodeBech32('noffer1qq225w60'), /not enough data to read on TLV/)
+    assert.throws(() => decodeBech32(bech32.encode('ndebit', bech32.toWords(new Uint8Array([1])), 5000)))
+    assert.throws(() => decodeBech32(bech32.encode('nmanage', bech32.toWords(new Uint8Array([2])), 5000)))
+  })
 })
 
 describe('noffer receipts', () => {
