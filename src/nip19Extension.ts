@@ -181,6 +181,7 @@ function parseTLV(data: Uint8Array): TLV {
   let result: TLV = {}
   let rest = data
   while (rest.length > 0) {
+    if (rest.length < 2) throw new Error(`not enough data to read on TLV ${rest[0]}`)
     let t = rest[0]
     let l = rest[1]
     let v = rest.slice(2, 2 + l)
