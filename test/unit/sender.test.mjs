@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { generateSecretKey, getPublicKey, nip44 } from 'nostr-tools'
 import { sendRequest, setDebug } from '../../build/sender.js'
 import { signedClinkReply } from './signed-reply.mjs'
+import { SendNofferRequest } from '../../build/index.js'
 
 const { getConversationKey, encrypt } = nip44
 
@@ -32,14 +33,14 @@ function createMockPool({ onSubscribe, onPublish, replyFactory }) {
     order,
     wasClosed: () => closed,
     subscribeCount: () => order.filter(item => item === 'subscribe').length,
-    subscribeMany(relays, filters, opts) {
+    subscribe(relays, filter, opts) {
       if (!subscribeCalled) {
         assert.equal(publishCalled, false, 'subscribe must happen before publish')
       }
       subscribeCalled = true
       closed = false
       order.push('subscribe')
-      onSubscribe?.(relays, filters, opts)
+      onSubscribe?.(relays, filter, opts)
       onevent = opts.onevent
       return {
         close: () => {
@@ -83,6 +84,44 @@ const sendOffer = (pool, clientPriv, clientPub, serverPub, timeoutSeconds = 5, m
   )
 
 describe('sender lifecycle', () => {
+  it('preserves code 6 payer-data discovery and sends numeric quantity on explicit retry', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+    const discovery = {
+      code: 6, error: 'Missing payer data', payer_data: ['name', 'quantity'],
+      range: { min: 1, max: 1000 }, latest: 'noffer1updated',
+    }
+    const payloads = []
+    const pool = createMockPool({
+      replyFactory: (event) => {
+        payloads.push(JSON.parse(nip44.decrypt(event.content, getConversationKey(serverPriv, clientPub))))
+        const response = payloads.length === 1 ? discovery : { bolt11: 'lnbc1dummy' }
+        return [signedClinkReply(serverPriv, clientPub, event.id, response, 21001)]
+      },
+    })
+    const request = {
+      offer: 'o', amount_sats: 21, description: 'x'.repeat(100),
+      zap: undefined, expires_in_seconds: undefined, payer_data: undefined,
+    }
+
+    const response = await SendNofferRequest(pool, clientPriv, ['wss://relay.example.com'], serverPub, request, 5)
+    assert.deepEqual(response, discovery)
+    assert.deepEqual(payloads, [{ offer: 'o', amount_sats: 21, description: request.description }])
+    assert.equal(pool.wasClosed(), true)
+
+    const retry = await SendNofferRequest(pool, clientPriv, ['wss://relay.example.com'], serverPub, {
+      ...request, payer_data: { name: 'Alice', quantity: 2, email: undefined },
+    }, 5)
+    assert.deepEqual(retry, { bolt11: 'lnbc1dummy' })
+    assert.deepEqual(payloads[1], {
+      offer: 'o', amount_sats: 21, description: request.description,
+      payer_data: { name: 'Alice', quantity: 2 },
+    })
+    assert.equal(pool.wasClosed(), true)
+  })
+
   it('subscribes before publish and resolves primary response', async () => {
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
@@ -388,7 +427,23 @@ describe('sender lifecycle', () => {
     assert.deepEqual(result, { bolt11: 'lnbc1dummy' })
   })
 
-  it('ignores a signed reply with an unsupported clink_version', async () => {
+  it('accepts a signed reply with no clink_version', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    const pool = createMockPool({
+      replyFactory: (request) => [
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1legacy' }, 21001, { omitClinkVersion: true }),
+      ],
+    })
+
+    const result = await sendOffer(pool, clientPriv, clientPub, serverPub)
+    assert.deepEqual(result, { bolt11: 'lnbc1legacy' })
+  })
+
+  it('ignores a signed reply with explicit unsupported clink_version', async () => {
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
     const serverPriv = generateSecretKey()
@@ -397,12 +452,29 @@ describe('sender lifecycle', () => {
     const pool = createMockPool({
       replyFactory: (request) => [
         signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'v2' }, 21001, { clinkVersion: '2' }),
-        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21001),
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1v1' }, 21001),
       ],
     })
 
     const result = await sendOffer(pool, clientPriv, clientPub, serverPub)
-    assert.deepEqual(result, { bolt11: 'lnbc1dummy' })
+    assert.deepEqual(result, { bolt11: 'lnbc1v1' })
+  })
+
+  it('ignores a signed reply with mixed clink_version tags', async () => {
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+
+    const pool = createMockPool({
+      replyFactory: (request) => [
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'mixed' }, 21001, { extraTags: [['clink_version', '2']] }),
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1v1' }, 21001),
+      ],
+    })
+
+    const result = await sendOffer(pool, clientPriv, clientPub, serverPub)
+    assert.deepEqual(result, { bolt11: 'lnbc1v1' })
   })
 
   it('matches peer pubkey case-insensitively', async () => {
@@ -433,7 +505,7 @@ describe('sender lifecycle', () => {
 
     await assert.rejects(
       () => sendOffer(pool, clientPriv, clientPub, serverPub, 0.05),
-      /failed to get response in time/
+      (err) => err instanceof Error && err.message === 'failed to get response in time'
     )
     assert.equal(pool.wasClosed(), true)
   })
