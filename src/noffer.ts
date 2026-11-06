@@ -7,33 +7,48 @@ export type { NofferReceipt } from "./receipt.js"
 export { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, encrypt } = nip44
 
+export type NofferPayerData = Record<string, string | number> & { quantity?: number }
+
 export type NofferData = {
     offer: string
     amount_sats?: number
     zap?: string
-    payer_data?: Record<string, string>
+    payer_data?: NofferPayerData
     expires_in_seconds?: number
     description?: string
 }
 
 export const validateNofferData = (data: unknown): NofferData => {
-    if (typeof data !== 'object' || data === null) throw new Error('data must be an object')
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('data must be an object')
     if (!('offer' in data) || typeof data.offer !== 'string') throw new Error('offer must be a string')
-    if ('amount_sats' in data && typeof data.amount_sats !== 'number') throw new Error('amount_sats must be a number if present')
-    if ('zap' in data && typeof data.zap !== 'string') throw new Error('zap must be a string if present')
-    if ('payer_data' in data && (typeof data.payer_data !== 'object' || data.payer_data === null || Array.isArray(data.payer_data))) {
-        throw new Error('payer_data must be an object if present')
+    if ('amount_sats' in data && data.amount_sats !== undefined && typeof data.amount_sats !== 'number') throw new Error('amount_sats must be a number if present')
+    if ('zap' in data && data.zap !== undefined && typeof data.zap !== 'string') throw new Error('zap must be a string if present')
+    if ('payer_data' in data && data.payer_data !== undefined) {
+        if (typeof data.payer_data !== 'object' || data.payer_data === null || Array.isArray(data.payer_data)) {
+            throw new Error('payer_data must be an object if present')
+        }
+        for (const [key, value] of Object.entries(data.payer_data)) {
+            if (value === undefined) continue
+            if (key === 'quantity') {
+                if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+                    throw new Error('payer_data.quantity must be a positive safe integer')
+                }
+            } else if (typeof value !== 'string') {
+                throw new Error(`payer_data.${key} must be a string`)
+            }
+        }
     }
-    if ('expires_in_seconds' in data && typeof data.expires_in_seconds !== 'number') throw new Error('expires_in_seconds must be a number if present')
-    if ('description' in data && typeof data.description !== 'string') throw new Error('description must be a string if present')
+    if ('expires_in_seconds' in data && data.expires_in_seconds !== undefined && typeof data.expires_in_seconds !== 'number') throw new Error('expires_in_seconds must be a number if present')
+    if ('description' in data && data.description !== undefined && typeof data.description !== 'string') throw new Error('description must be a string if present')
     return data as NofferData
 }
 
 export type NofferSuccess = { bolt11: string }
-export type NofferError = { code: number, error: string, range?: { min: number, max: number }, latest?: string }
+export type NofferError = { code: number, error: string, range?: { min: number, max: number }, latest?: string, payer_data?: string[] }
 export type NofferResponse = NofferSuccess | NofferError
 
 export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
+    validateNofferData(data)
     if (data.description && data.description.length > 100) {
         throw new Error('Description must be less than 100 characters')
     }

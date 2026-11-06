@@ -111,7 +111,7 @@ const sdk = new ClinkSDK({
 
 const request: NofferData = {
   offer: decoded.data.offer,
-  amount_sats: 1000, // sats (optional for variable/spontaneous offers)
+  amount_sats: 1000, // payer-selected unit price in sats for spontaneous offers
   description: 'coffee for bob', // optional, max 100 chars
   expires_in_seconds: 3600, // optional
   payer_data: { name: 'Alice' }, // optional
@@ -129,6 +129,21 @@ sdk.Noffer(request, receiptCallback).then(response => {
   }
 });
 ```
+
+#### Payer Data Discovery and Quantity
+
+An offer host can respond with code `6` and `payer_data: string[]` listing the required payer-data keys. Treat this as discovery: collect the requested values and explicitly retry the same offer with `payer_data` populated. The SDK preserves the list but does not collect values or retry automatically. For example, after receiving `{ code: 6, error: 'Missing payer data', payer_data: ['name', 'quantity'] }`:
+
+```ts
+const retry = await sdk.Noffer({
+  ...request,
+  payer_data: { ...request.payer_data, name: 'Alice', quantity: 2 },
+});
+```
+
+The exact key `quantity` must be a positive safe integer JSON number, not a string. All other payer-data values must be strings. Undefined optional fields are treated as omitted. Invalid outgoing requests are rejected locally before encryption or relay contact.
+
+Offer price categories describe the **unit price**: `Fixed = 0` is a fixed unit price, `Variable = 1` is resolved by the host on request, and `Spontaneous = 2` uses the payer's `amount_sats` as the unit price. Quantity multiplies the unit price only when the host's required payer-data list includes `quantity`; merely sending it does not enable multiplication. The host computes the invoice total, and wallets must verify that total before payment. The SDK client is not a pricing engine.
 
 ### 3. Sending a CLINK Debit Request
 
@@ -322,8 +337,10 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 | `UnsignedEvent` | type | Event shape before `finalizeEvent` |
 
 ### Types
-- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: Record<string, string> }`
-- **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number }, latest?: string }`
+- **`NofferPayerData`**: `Record<string, string | number> & { quantity?: number }` - runtime validation permits numbers only for the exact `quantity` key, as positive safe integers
+- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: NofferPayerData }`
+- **`NofferError`**: `{ code: number, error: string, range?: { min: number, max: number }, latest?: string, payer_data?: string[] }` - code `6` can list required payer-data keys for discovery and retry
+- **`NofferResponse`**: `{ bolt11: string } | NofferError`
 - **`NofferReceipt`**: `{ res: 'ok', preimage?: string }` — Lightning receipts include `preimage`; internal settlement omits it
 - **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string, description?: string }`
 - **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number, reason?: Gfy6Reason, delta?: { max_delta_ms: number, actual_delta_ms: number }, retry_after?: number, range?: { min: number, max: number } }`

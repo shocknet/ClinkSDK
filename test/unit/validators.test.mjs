@@ -13,6 +13,7 @@ import {
   newGetRequest,
   gfy6Reason,
   SendNdebitRequest,
+  SendNofferRequest,
   generateSecretKey,
   newNdebitFullAccessRequest,
   newNdebitPaymentRequest,
@@ -101,6 +102,80 @@ describe('validators', () => {
     assert.doesNotThrow(() =>
       validateNofferData({ offer: 'o', payer_data: { name: 'bob' } })
     )
+  })
+
+  it('accepts numeric noffer quantity and string payer data', () => {
+    for (const quantity of [1, 2, Number.MAX_SAFE_INTEGER]) {
+      const data = { offer: 'o', payer_data: { quantity, name: 'Alice', Quantity: 'custom', quantity_hint: '2' } }
+      assert.equal(validateNofferData(data), data)
+    }
+    assert.doesNotThrow(() => validateNofferData({ offer: 'o', payer_data: {} }))
+  })
+
+  it('rejects invalid noffer quantity', () => {
+    for (const quantity of [
+      0, -0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1,
+      NaN, Infinity, -Infinity, '2', '', null, true, false, {}, [], 2n,
+    ]) {
+      assert.throws(
+        () => validateNofferData({ offer: 'o', payer_data: { quantity } }),
+        /payer_data\.quantity must be a positive safe integer/,
+      )
+    }
+  })
+
+  it('rejects invalid noffer payer-data values and containers', () => {
+    for (const value of [2, 0, NaN, Infinity, null, true, false, {}, [], 2n, () => {}, Symbol('value')]) {
+      for (const key of ['name', 'Quantity', 'quantity_hint']) {
+        assert.throws(
+          () => validateNofferData({ offer: 'o', payer_data: { [key]: value } }),
+          /must be a string/,
+        )
+      }
+    }
+    for (const payer_data of [null, [], ['Alice'], 'Alice', 2, true, () => {}]) {
+      assert.throws(() => validateNofferData({ offer: 'o', payer_data }), /payer_data must be an object/)
+    }
+    for (const data of [null, [], Object.assign([], { offer: 'o' }), 'o', 2, undefined]) {
+      assert.throws(() => validateNofferData(data), /data must be an object/)
+    }
+  })
+
+  it('accepts undefined optional noffer fields as omitted', () => {
+    const data = {
+      offer: 'o', amount_sats: undefined, zap: undefined, payer_data: undefined,
+      expires_in_seconds: undefined, description: undefined,
+    }
+    assert.equal(validateNofferData(data), data)
+    assert.equal(JSON.stringify(data), '{"offer":"o"}')
+    const withPayerData = { ...data, payer_data: { quantity: undefined, name: undefined } }
+    assert.equal(validateNofferData(withPayerData), withPayerData)
+    assert.equal(JSON.stringify(withPayerData), '{"offer":"o","payer_data":{}}')
+  })
+
+  it('SendNofferRequest validates before encryption or relay contact', async () => {
+    let contacted = false
+    const pool = {
+      subscribe() { contacted = true; throw new Error('unexpected subscribe') },
+      publish() { contacted = true; throw new Error('unexpected publish') },
+    }
+    for (const [data, error] of [
+      [{}, /offer must be a string/],
+      [{ offer: 1 }, /offer must be a string/],
+      [{ offer: 'o', amount_sats: '21' }, /amount_sats must be a number/],
+      [{ offer: 'o', zap: null }, /zap must be a string/],
+      [{ offer: 'o', expires_in_seconds: '60' }, /expires_in_seconds must be a number/],
+      [{ offer: 'o', description: 1 }, /description must be a string/],
+      [{ offer: 'o', description: 'x'.repeat(101) }, /Description must be less than 100 characters/],
+      [{ offer: 'o', payer_data: [] }, /payer_data must be an object/],
+      [{ offer: 'o', payer_data: { name: 2 } }, /payer_data\.name must be a string/],
+      [{ offer: 'o', payer_data: { quantity: '2' } }, /payer_data\.quantity must be a positive safe integer/],
+      [{ offer: 'o', payer_data: { quantity: 0 } }, /payer_data\.quantity must be a positive safe integer/],
+    ]) {
+      // Invalid keys ensure validation happens before key derivation and encryption too.
+      await assert.rejects(SendNofferRequest(pool, new Uint8Array(), [], 'invalid', data), error)
+    }
+    assert.equal(contacted, false)
   })
 
   it('validates nmanage requests by action', () => {
