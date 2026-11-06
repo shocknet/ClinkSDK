@@ -139,6 +139,54 @@ describe('bech32 round-trip', () => {
   })
 })
 
+describe('TLV encoding limits', () => {
+  const encoders = [
+    ['noffer', nofferEncode, fixtures.noffer.decoded, 'offer'],
+    ['ndebit', ndebitEncode, fixtures.ndebit.decoded, 'pointer'],
+    ['nmanage', nmanageEncode, fixtures.nmanage.decoded, 'pointer'],
+  ]
+
+  for (const [kind, encode, pointer, identifier] of encoders) {
+    for (const field of [identifier, 'relay']) {
+      it(`checks the UTF-8 byte length of ${kind} ${field}`, () => {
+        for (const value of ['a'.repeat(255), '\u00e9'.repeat(127) + 'a']) {
+          assert.equal(utf8.encode(value).length, 255)
+          const expected = { ...pointer, [field]: value }
+          const decoded = decodeBech32(encode(expected)).data
+          assert.equal(decoded[field], value)
+          assert.equal(decoded.pubkey, expected.pubkey)
+          assert.equal(decoded.relay, expected.relay)
+          assert.equal(decoded[identifier], expected[identifier])
+        }
+        for (const value of ['a'.repeat(256), 'a'.repeat(257), 'a'.repeat(512), '\u00e9'.repeat(128)]) {
+          assert.throws(() => encode({ ...pointer, [field]: value }), /TLV [12] value exceeds 255 bytes/)
+        }
+      })
+    }
+  }
+
+  it('also rejects an oversized noffer currency value', () => {
+    assert.throws(() => nofferEncode({
+      ...fixtures.noffer.decoded, price: undefined,
+      priceType: OfferPriceType.Variable, currency: 'a'.repeat(256),
+    }), /TLV 5 value exceeds 255 bytes/)
+  })
+
+  it('rejects an oversized identifier containing injected routing TLVs', () => {
+    const relay = utf8.encode('wss://injected.example')
+    const injected = [0, 32, ...new Uint8Array(32).fill(0x41), 1, relay.length, ...relay]
+    injected.push(127, 100, ...new Uint8Array(100).fill(0x41))
+    const padding = 256 - injected.length - 2
+    injected.push(127, padding, ...new Uint8Array(padding).fill(0x41))
+    const identifier = String.fromCharCode(...injected)
+    assert.equal(utf8.encode(identifier).length, 256)
+    // A wrapped length of zero would expose the identifier's bytes as routing TLVs.
+    for (const [, encode, pointer, field] of encoders) {
+      assert.throws(() => encode({ ...pointer, [field]: identifier }), /TLV 2 value exceeds 255 bytes/)
+    }
+  })
+})
+
 const withKelvinSign = (encoded) => {
   const upper = encoded.toUpperCase()
   const at = upper.indexOf('K', upper.lastIndexOf('1') + 1)
