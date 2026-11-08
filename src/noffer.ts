@@ -20,14 +20,26 @@ export type NofferData = {
 
 export const validateNofferData = (data: unknown): NofferData => {
     if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('data must be an object')
-    if (!('offer' in data) || typeof data.offer !== 'string') throw new Error('offer must be a string')
-    if ('amount_sats' in data && data.amount_sats !== undefined && typeof data.amount_sats !== 'number') throw new Error('amount_sats must be a number if present')
-    if ('zap' in data && data.zap !== undefined && typeof data.zap !== 'string') throw new Error('zap must be a string if present')
-    if ('payer_data' in data && data.payer_data !== undefined) {
-        if (typeof data.payer_data !== 'object' || data.payer_data === null || Array.isArray(data.payer_data)) {
+    const { offer, amount_sats, zap, payer_data, expires_in_seconds, description } = data as Record<string, unknown>
+    if (typeof offer !== 'string') throw new Error('offer must be a string')
+    if (offer.length === 0) throw new Error('offer must not be empty')
+    const out: NofferData = { offer }
+    if (amount_sats !== undefined) {
+        if (typeof amount_sats !== 'number' || !Number.isSafeInteger(amount_sats) || amount_sats <= 0) {
+            throw new Error('amount_sats must be a positive safe integer if present')
+        }
+        out.amount_sats = amount_sats
+    }
+    if (zap !== undefined) {
+        if (typeof zap !== 'string') throw new Error('zap must be a string if present')
+        out.zap = zap
+    }
+    if (payer_data !== undefined) {
+        if (typeof payer_data !== 'object' || payer_data === null || Array.isArray(payer_data)) {
             throw new Error('payer_data must be an object if present')
         }
-        for (const [key, value] of Object.entries(data.payer_data)) {
+        const entries: [string, string | number][] = []
+        for (const [key, value] of Object.entries(payer_data)) {
             if (value === undefined) continue
             if (key === 'quantity') {
                 if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -36,11 +48,22 @@ export const validateNofferData = (data: unknown): NofferData => {
             } else if (typeof value !== 'string') {
                 throw new Error(`payer_data.${key} must be a string`)
             }
+            entries.push([key, value])
         }
+        out.payer_data = Object.fromEntries(entries) as NofferPayerData
     }
-    if ('expires_in_seconds' in data && data.expires_in_seconds !== undefined && typeof data.expires_in_seconds !== 'number') throw new Error('expires_in_seconds must be a number if present')
-    if ('description' in data && data.description !== undefined && typeof data.description !== 'string') throw new Error('description must be a string if present')
-    return data as NofferData
+    if (expires_in_seconds !== undefined) {
+        if (typeof expires_in_seconds !== 'number' || !Number.isSafeInteger(expires_in_seconds) || expires_in_seconds < 0) {
+            throw new Error('expires_in_seconds must be a non-negative safe integer if present')
+        }
+        out.expires_in_seconds = expires_in_seconds
+    }
+    if (description !== undefined) {
+        if (typeof description !== 'string') throw new Error('description must be a string if present')
+        if (description.length > 100) throw new Error('Description must be less than 100 characters')
+        out.description = description
+    }
+    return out
 }
 
 export type NofferSuccess = { bolt11: string }
@@ -48,12 +71,9 @@ export type NofferError = { code: number, error: string, range?: { min: number, 
 export type NofferResponse = NofferSuccess | NofferError
 
 export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
-    validateNofferData(data)
-    if (data.description && data.description.length > 100) {
-        throw new Error('Description must be less than 100 characters')
-    }
+    const payload = validateNofferData(data)
     const publicKey = getPublicKey(privateKey)
-    const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, toPubKey))
+    const content = encrypt(JSON.stringify(payload), getConversationKey(privateKey, toPubKey))
     const event = newNofferEvent(content, publicKey, toPubKey)
     return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, CLINK_OFFER_KIND, timeoutSeconds, onReceipt)
 }

@@ -15,10 +15,13 @@ import {
   SendNdebitRequest,
   SendNofferRequest,
   generateSecretKey,
+  getPublicKey,
+  nip44,
   newNdebitFullAccessRequest,
   newNdebitPaymentRequest,
   newNdebitBudgetRequest,
 } from '../../build/index.js'
+import { signedClinkReply } from './signed-reply.mjs'
 
 describe('validators', () => {
   it('validates k1', () => {
@@ -107,7 +110,7 @@ describe('validators', () => {
   it('accepts numeric noffer quantity and string payer data', () => {
     for (const quantity of [1, 2, Number.MAX_SAFE_INTEGER]) {
       const data = { offer: 'o', payer_data: { quantity, name: 'Alice', Quantity: 'custom', quantity_hint: '2' } }
-      assert.equal(validateNofferData(data), data)
+      assert.deepEqual(validateNofferData(data), data)
     }
     assert.doesNotThrow(() => validateNofferData({ offer: 'o', payer_data: {} }))
   })
@@ -146,10 +149,10 @@ describe('validators', () => {
       offer: 'o', amount_sats: undefined, zap: undefined, payer_data: undefined,
       expires_in_seconds: undefined, description: undefined,
     }
-    assert.equal(validateNofferData(data), data)
+    assert.deepEqual(validateNofferData(data), { offer: 'o' })
     assert.equal(JSON.stringify(data), '{"offer":"o"}')
     const withPayerData = { ...data, payer_data: { quantity: undefined, name: undefined } }
-    assert.equal(validateNofferData(withPayerData), withPayerData)
+    assert.deepEqual(validateNofferData(withPayerData), { offer: 'o', payer_data: {} })
     assert.equal(JSON.stringify(withPayerData), '{"offer":"o","payer_data":{}}')
   })
 
@@ -162,9 +165,9 @@ describe('validators', () => {
     for (const [data, error] of [
       [{}, /offer must be a string/],
       [{ offer: 1 }, /offer must be a string/],
-      [{ offer: 'o', amount_sats: '21' }, /amount_sats must be a number/],
+      [{ offer: 'o', amount_sats: '21' }, /amount_sats must be a positive safe integer/],
       [{ offer: 'o', zap: null }, /zap must be a string/],
-      [{ offer: 'o', expires_in_seconds: '60' }, /expires_in_seconds must be a number/],
+      [{ offer: 'o', expires_in_seconds: '60' }, /expires_in_seconds must be a non-negative safe integer/],
       [{ offer: 'o', description: 1 }, /description must be a string/],
       [{ offer: 'o', description: 'x'.repeat(101) }, /Description must be less than 100 characters/],
       [{ offer: 'o', payer_data: [] }, /payer_data must be an object/],
@@ -176,6 +179,23 @@ describe('validators', () => {
       await assert.rejects(SendNofferRequest(pool, new Uint8Array(), [], 'invalid', data), error)
     }
     assert.equal(contacted, false)
+  })
+
+  it('requires safe integer offer amounts and expiries before sending', async () => {
+    for (const value of [NaN, Infinity, -Infinity, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, null, '21']) {
+      for (const field of ['amount_sats', 'expires_in_seconds']) {
+        const data = { offer: 'o', [field]: value }
+        assert.throws(() => validateNofferData(data), /safe integer/)
+        await assert.rejects(SendNofferRequest({}, new Uint8Array(), [], 'invalid', data), /safe integer/)
+      }
+    }
+    assert.throws(() => validateNofferData({ offer: 'o', amount_sats: 0 }), /positive safe integer/)
+    assert.deepEqual(validateNofferData({ offer: 'o', amount_sats: Number.MAX_SAFE_INTEGER, expires_in_seconds: 0 }), {
+      offer: 'o', amount_sats: Number.MAX_SAFE_INTEGER, expires_in_seconds: 0,
+    })
+    assert.doesNotThrow(() => validateNofferData({ offer: 'o', expires_in_seconds: Number.MAX_SAFE_INTEGER }))
+    assert.throws(() => validateNofferData({ offer: '' }), /offer must not be empty/)
+    assert.throws(() => validateNofferData({ offer: 'o', description: 'x'.repeat(101) }), /Description/)
   })
 
   it('validates nmanage requests by action', () => {
@@ -200,5 +220,114 @@ describe('validators', () => {
         payer_data: [1],
       })
     )
+  })
+})
+
+describe('request serialization', () => {
+  const captureRequest = async (send, data) => {
+    const clientKey = generateSecretKey()
+    const serverKey = generateSecretKey()
+    const clientPub = getPublicKey(clientKey)
+    const serverPub = getPublicKey(serverKey)
+    let payload
+    let deliver
+    const pool = {
+      subscribe(_relays, _filter, handlers) {
+        deliver = handlers.onevent
+        return { close() {} }
+      },
+      publish(_relays, event) {
+        payload = JSON.parse(nip44.decrypt(event.content, nip44.getConversationKey(serverKey, clientPub)))
+        queueMicrotask(() => deliver(signedClinkReply(serverKey, clientPub, event.id, { res: 'ok' }, event.kind)))
+        return [Promise.resolve('ok')]
+      },
+    }
+    await send(pool, clientKey, ['wss://relay.example'], serverPub, data, 1)
+    return payload
+  }
+
+  it('detaches validated offer and debit data from later caller mutations', () => {
+    const offer = { offer: 'o', payer_data: { quantity: 2, name: 'Alice' } }
+    const offerPayload = validateNofferData(offer)
+    offer.offer = 'changed'
+    offer.payer_data.quantity = 100
+    assert.deepEqual(offerPayload, { offer: 'o', payer_data: { quantity: 2, name: 'Alice' } })
+    const debit = { amount_sats: 21, frequency: { number: 1, unit: 'day' } }
+    const debitPayload = validateNdebitData(debit)
+    debit.frequency.number = -1
+    debit.frequency.unit = 'year'
+    assert.deepEqual(debitPayload, { amount_sats: 21, frequency: { number: 1, unit: 'day' } })
+  })
+
+  it('does not invoke top-level or inherited payer-data serializers', async () => {
+    let serializations = 0
+    const payer_data = Object.assign(Object.create({
+      toJSON() { serializations++; return { quantity: '2', name: 42 } },
+    }), { quantity: 2, name: 'Alice' })
+    const data = {
+      offer: 'o', amount_sats: 21, payer_data,
+      toJSON() { serializations++; return { offer: 'changed', amount_sats: 1, payer_data: null } },
+    }
+    assert.deepEqual(await captureRequest(SendNofferRequest, data), {
+      offer: 'o', amount_sats: 21, payer_data: { quantity: 2, name: 'Alice' },
+    })
+    assert.equal(serializations, 0)
+  })
+
+  it('does not invoke debit frequency serializers or drop recurring budgets', async () => {
+    for (const replacement of [{ number: -1, unit: 'year' }, undefined]) {
+      let serializations = 0
+      const frequency = Object.assign(Object.create({ toJSON() { serializations++; return replacement } }), { number: 1, unit: 'day' })
+      const data = { pointer: 'p', amount_sats: 21, frequency, toJSON() { throw new Error('must not serialize caller') } }
+      assert.deepEqual(await captureRequest(SendNdebitRequest, data), {
+        pointer: 'p', amount_sats: 21, frequency: { number: 1, unit: 'day' },
+      })
+      assert.equal(serializations, 0)
+    }
+  })
+
+  it('reads offer scalars and payer-data getters only once before signing', async () => {
+    const reads = { offer: 0, amount: 0, payerData: 0, quantity: 0, expiry: 0, description: 0 }
+    const data = {
+      get offer() { return ++reads.offer === 1 ? 'o' : 'changed' },
+      get amount_sats() { return ++reads.amount === 1 ? 21 : -1 },
+      get payer_data() {
+        reads.payerData++
+        return { get quantity() { return ++reads.quantity === 1 ? 2 : 'bad' } }
+      },
+      get expires_in_seconds() { return ++reads.expiry === 1 ? 60 : NaN },
+      get description() { return ++reads.description === 1 ? 'memo' : 'x'.repeat(101) },
+    }
+    assert.deepEqual(await captureRequest(SendNofferRequest, data), {
+      offer: 'o', amount_sats: 21, payer_data: { quantity: 2 }, expires_in_seconds: 60, description: 'memo',
+    })
+    assert.deepEqual(Object.values(reads), [1, 1, 1, 1, 1, 1])
+  })
+
+  it('reads debit scalars and nested frequency getters only once before signing', async () => {
+    const reads = { pointer: 0, amount: 0, frequency: 0, number: 0, unit: 0 }
+    const data = {
+      get pointer() { return ++reads.pointer === 1 ? 'p' : 'changed' },
+      get amount_sats() { return ++reads.amount === 1 ? 21 : -1 },
+      get frequency() {
+        reads.frequency++
+        return {
+          get number() { return ++reads.number === 1 ? 1 : -1 },
+          get unit() { return ++reads.unit === 1 ? 'day' : 'year' },
+        }
+      },
+    }
+    assert.deepEqual(await captureRequest(SendNdebitRequest, data), { pointer: 'p', amount_sats: 21, frequency: { number: 1, unit: 'day' } })
+    assert.deepEqual(Object.values(reads), [1, 1, 1, 1, 1])
+  })
+
+  it('materializes inherited/non-enumerable fields and treats payer data as a map, not a serialized value', async () => {
+    const inherited = Object.create({ offer: 'inherited' })
+    assert.deepEqual(await captureRequest(SendNofferRequest, inherited), { offer: 'inherited' })
+    const nonEnumerable = Object.defineProperty({}, 'offer', { value: 'hidden' })
+    assert.deepEqual(await captureRequest(SendNofferRequest, nonEnumerable), { offer: 'hidden' })
+    assert.deepEqual(await captureRequest(SendNofferRequest, { offer: 'o', payer_data: new Date(0) }), { offer: 'o', payer_data: {} })
+    const payer_data = JSON.parse('{"quantity":2,"__proto__":"opaque","constructor":"opaque"}')
+    assert.deepEqual(await captureRequest(SendNofferRequest, { offer: 'o', payer_data }), { offer: 'o', payer_data })
   })
 })

@@ -9,4 +9,12 @@ const decode = ((value: string) => {
     return nostrNip19.decode(value)
 }) as typeof nostrNip19.decode
 
-export const nip19: typeof nostrNip19 = { ...nostrNip19, decode }
+const decodeNostrURI: typeof nostrNip19.decodeNostrURI = (value) => {
+    try {
+        return decode(value.startsWith("nostr:") ? value.substring(6) : value)
+    } catch {
+        return { type: "invalid", data: null }
+    }
+}
+
+export const nip19: typeof nostrNip19 = { ...nostrNip19, decode, decodeNostrURI }

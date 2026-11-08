@@ -143,7 +143,19 @@ const retry = await sdk.Noffer({
 
 The exact key `quantity` must be a positive safe integer JSON number, not a string. All other payer-data values must be strings. Undefined optional fields are treated as omitted. Invalid outgoing requests are rejected locally before encryption or relay contact.
 
+When supplied, `amount_sats` must be a positive safe integer and `expires_in_seconds` must be a non-negative safe integer. Zero expiry is permitted; the host determines the resulting invoice expiry. Fractions, non-finite numbers, and unsafe integers are rejected rather than rounded or serialized as `null`.
+
 Offer price categories describe the **unit price**: `Fixed = 0` is a fixed unit price, `Variable = 1` is resolved by the host on request, and `Spontaneous = 2` uses the payer's `amount_sats` as the unit price. Quantity multiplies the unit price only when the host's required payer-data list includes `quantity`; merely sending it does not enable multiplication. The host computes the invoice total, and wallets must verify that total before payment. The SDK client is not a pricing engine.
+
+Receipt callbacks keep listening only after an invoice response. Discovery and other error responses close their subscriptions immediately; they cannot produce a receipt for that attempt.
+
+#### Encoding Bounds
+
+Each TLV value is limited to 255 bytes, measured after UTF-8 encoding for strings. Oversized offer IDs, pointers, relay URLs, and currency values are rejected before encoding.
+
+Encoded offer prices support integers from `0` through `Number.MAX_SAFE_INTEGER`. Existing nonzero 32-bit prices retain their four-byte encoding; larger prices use lossless wider big-endian values. An explicit zero price is encoded as zero rather than omitted. An absent price remains optional, and currency cannot be combined with any supplied price, including zero. Decoding rejects empty or unsafe price values instead of returning a rounded number.
+
+Both `nip19.decode` and `nip19.decodeNostrURI` enforce printable ASCII. The URI helper retains its `{ type: 'invalid', data: null }` result for invalid inputs.
 
 ### 3. Sending a CLINK Debit Request
 
@@ -316,6 +328,10 @@ For validating inbound/outbound CLINK payloads (e.g. server-side request checks)
 
 - `validateNofferData`, `validateNdebitData`, `validateK1`, `validateBudgetFrequency`
 - `validateNmanageRequest` and per-action helpers: `validateNmanageCreateOffer`, `validateNmanageUpdateOffer`, `validateNmanageDeleteOffer`, `validateNmanageGetOffer`, `validateNmanageListOffers`, `validateOfferFields`
+
+`validateNofferData`, `validateNdebitData`, and `validateBudgetFrequency` return detached, normalized objects rather than the original input. They read recognized values once, omit undefined optional fields and unknown top-level fields, and copy nested payer-data or frequency values. Offer and debit sending serialize this validated payload, not caller-defined `toJSON()` output.
+
+When publishing to multiple relays, one rejection does not abort another relay's accepted request. Publication fails only when all attempts fail; an empty relay list is rejected. A timeout or publication error is not proof that the host did not act, so callers must not blindly retry payments.
 
 ### Debug
 - `setDebug(enabled: boolean)` — when `true`, logs relay subscribe/publish/response lifecycle to the console (default `false`)

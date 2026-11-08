@@ -1,5 +1,6 @@
 import { nip44, finalizeEvent, verifyEvent, UnsignedEvent, type Event } from "nostr-tools"
 import { AbstractSimplePool, SubCloser } from "nostr-tools/lib/types/pool"
+import { CLINK_OFFER_KIND } from "./constants.js"
 import { isNofferReceipt } from "./receipt.js"
 const { getConversationKey, decrypt } = nip44
 
@@ -64,6 +65,9 @@ const RECEIPT_RESUBSCRIBE_MS = 4000
 const RELISTEN_MS = 500
 
 export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relays: string[], toPub: string, e: UnsignedEvent, kindExpected: number, timeoutSeconds?: number, moreCb?: (data: any) => void): Promise<T> => {
+    if (relays.length === 0) {
+        throw new Error('no relays provided')
+    }
     const signed = finalizeEvent(e, pair.privateKey)
     // Wire events use lowercase hex; callers sometimes pass mixed case.
     const expectedPub = toPub.toLowerCase()
@@ -86,15 +90,15 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         const filter = newFilter(pair.publicKey, signed.id, kindExpected)
 
         const stopTimers = () => {
-            if (timer) {
+            if (timer !== null) {
                 clearTimeout(timer)
                 timer = null
             }
-            if (relistenTimer) {
+            if (relistenTimer !== null) {
                 clearTimeout(relistenTimer)
                 relistenTimer = null
             }
-            if (resubTimer) {
+            if (resubTimer !== null) {
                 clearInterval(resubTimer)
                 resubTimer = null
             }
@@ -119,7 +123,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
         }
 
         const waitForReceipt = () => {
-            if (resubTimer) {
+            if (finished || resubTimer !== null) {
                 return
             }
             resubTimer = setInterval(listen, RECEIPT_RESUBSCRIBE_MS)
@@ -129,11 +133,18 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             if (finished) {
                 return
             }
+            if (relistenTimer !== null) {
+                clearTimeout(relistenTimer)
+                relistenTimer = null
+            }
             const gen = ++listenGen
             log(`[ClinkSDK] Setting up subscription with filter:`, JSON.stringify(filter, null, 2))
             closer.close()
-            closer = pool.subscribe(relays, filter, {
+            const subscription = pool.subscribe(relays, filter, {
                 onevent: async (event) => {
+                    if (finished || gen !== listenGen) {
+                        return
+                    }
                     log(`[ClinkSDK] Received response event: kind=${event.kind}, eventId=${event.id}, from=${event.pubkey}`)
                     if (!isClinkResponse(event, expect)) {
                         log(`[ClinkSDK] Ignoring event that is not a valid CLINK response for eventId=${signed.id}`)
@@ -144,26 +155,29 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                         const parsed = JSON.parse(content)
                         if (!settled) {
                             settled = true
-                            if (timer) {
+                            if (timer !== null) {
                                 clearTimeout(timer)
                                 timer = null
                             }
                             log(`[ClinkSDK] Response resolved successfully for eventId=${signed.id}`)
                             res(parsed)
-                            if (!moreCb) {
+                            if (!moreCb || kindExpected !== CLINK_OFFER_KIND ||
+                                parsed === null || typeof parsed !== 'object' ||
+                                typeof parsed.bolt11 !== 'string' || parsed.bolt11.length === 0 ||
+                                'code' in parsed || 'error' in parsed) {
                                 cleanup()
                                 return
                             }
                             waitForReceipt()
                         } else if (moreCb && isNofferReceipt(parsed)) {
                             log(`[ClinkSDK] Receipt received for eventId=${signed.id}, calling moreCb`)
-                            moreCb(parsed)
                             cleanup()
+                            moreCb(parsed)
                         } else {
                             log(`[ClinkSDK] Ignoring extra non-receipt event for eventId=${signed.id}`)
                         }
                     } catch (err) {
-                        logError(`[ClinkSDK] Failed to decrypt/parse response for eventId=${signed.id}:`, err)
+                        logError(`[ClinkSDK] Failed to handle response for eventId=${signed.id}:`, err)
                         if (!settled) {
                             fail(err)
                         }
@@ -173,13 +187,19 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                     log(`[ClinkSDK] End of stored events received for eventId=${signed.id}`)
                 },
                 onclose: () => {
-                    if (finished || gen !== listenGen) {
+                    if (finished || gen !== listenGen || relistenTimer !== null) {
                         return
                     }
                     log(`[ClinkSDK] Subscription closed, listening again for eventId=${signed.id}`)
                     relistenTimer = setTimeout(listen, RELISTEN_MS)
                 },
             })
+            // subscribe may invoke callbacks before returning its closer.
+            if (finished || gen !== listenGen) {
+                subscription.close()
+            } else {
+                closer = subscription
+            }
         }
 
         if (timeoutSeconds) {
@@ -191,14 +211,27 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
 
         try {
             listen()
-            Promise.all(pool.publish(relays, signed)).then(() => {
-                log(`[ClinkSDK] Request published to ${relays.length} relays, waiting for response...`)
-            }).catch((error) => {
-                logError(`[ClinkSDK] Failed to publish to relays:`, error)
-                fail(error)
-            })
+            if (finished) {
+                return
+            }
+            const attempts = pool.publish(relays, signed)
+            if (attempts.length === 0) {
+                throw new Error('no publish attempts returned')
+            }
+            let remaining = attempts.length
+            for (const attempt of attempts) {
+                attempt.then(() => {
+                    log(`[ClinkSDK] Request accepted by a relay, waiting for response...`)
+                }, (error) => {
+                    logError(`[ClinkSDK] Failed to publish to a relay:`, error)
+                    // A successful attempt leaves remaining above zero.
+                    if (--remaining === 0) {
+                        fail(error)
+                    }
+                })
+            }
         } catch (error) {
-            logError(`[ClinkSDK] Failed to establish subscription:`, error)
+            logError(`[ClinkSDK] Failed to send request:`, error)
             fail(error)
         }
     })

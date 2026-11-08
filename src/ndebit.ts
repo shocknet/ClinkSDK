@@ -23,17 +23,15 @@ export const generateK1 = (): string => bytesToHex(randomBytes(32))
 
 export const validateBudgetFrequency = (frequency: unknown): BudgetFrequency => {
     if (typeof frequency !== 'object' || frequency === null || Array.isArray(frequency)) throw new Error('frequency must be an object')
-    if (!('number' in frequency) || typeof frequency.number !== 'number') throw new Error('frequency.number must be a number')
-    if (frequency.number <= 0 || !Number.isSafeInteger(frequency.number)) throw new Error('frequency.number must be a positive integer')
-    if (!('unit' in frequency) || typeof frequency.unit !== 'string') throw new Error('frequency.unit must be a string')
-    if (frequency.unit !== 'day' && frequency.unit !== 'week' && frequency.unit !== 'month') {
+    const { number, unit } = frequency as Record<string, unknown>
+    if (typeof number !== 'number') throw new Error('frequency.number must be a number')
+    if (number <= 0 || !Number.isSafeInteger(number)) throw new Error('frequency.number must be a positive integer')
+    if (typeof unit !== 'string') throw new Error('frequency.unit must be a string')
+    if (unit !== 'day' && unit !== 'week' && unit !== 'month') {
         throw new Error('frequency.unit must be day, week, or month')
     }
-    return frequency as BudgetFrequency
+    return { number, unit }
 }
-
-const defined = (rec: Record<string, unknown>, key: string): boolean =>
-    rec[key] !== undefined
 
 const assertAmountSats = (n: unknown): number => {
     if (typeof n !== 'number' || !Number.isSafeInteger(n) || n <= 0) {
@@ -51,43 +49,34 @@ const assertBolt11 = (bolt11: unknown): string => {
 
 export const validateNdebitData = (data: unknown): NdebitData => {
     if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('data must be an object')
-    const rec = data as Record<string, unknown>
-    if (defined(rec, 'pointer') && typeof rec.pointer !== 'string') throw new Error('pointer must be a string if present')
-    if (defined(rec, 'amount_sats')) assertAmountSats(rec.amount_sats)
-    if (defined(rec, 'bolt11')) assertBolt11(rec.bolt11)
-    if (defined(rec, 'description')) {
-        if (typeof rec.description !== 'string') throw new Error('description must be a string if present')
-        assertDescription(rec.description)
+    const { pointer, amount_sats, bolt11, frequency, k1, description } = data as Record<string, unknown>
+    const out: NdebitData = {}
+    if (pointer !== undefined) {
+        if (typeof pointer !== 'string') throw new Error('pointer must be a string if present')
+        out.pointer = pointer
     }
-
-    const bolt11 = defined(rec, 'bolt11') ? rec.bolt11 as string : undefined
-    const hasFrequency = defined(rec, 'frequency')
-    const hasAmount = defined(rec, 'amount_sats')
-    const hasK1 = defined(rec, 'k1')
-
-    if (hasK1) {
-        validateK1(rec.k1)
-        if (!bolt11 || hasFrequency) {
+    if (amount_sats !== undefined) out.amount_sats = assertAmountSats(amount_sats)
+    if (bolt11 !== undefined) out.bolt11 = assertBolt11(bolt11)
+    if (description !== undefined) {
+        if (typeof description !== 'string') throw new Error('description must be a string if present')
+        assertDescription(description)
+        out.description = description
+    }
+    if (k1 !== undefined) {
+        out.k1 = validateK1(k1)
+        if (!out.bolt11 || frequency !== undefined) {
             throw new Error('k1 requires a bolt11 payment request')
         }
     }
-    if (hasFrequency) {
-        if (bolt11) {
+    if (frequency !== undefined) {
+        if (out.bolt11) {
             throw new Error('frequency cannot be combined with bolt11')
         }
-        if (!hasAmount) {
+        if (amount_sats === undefined) {
             throw new Error('frequency requires amount_sats')
         }
-        validateBudgetFrequency(rec.frequency)
+        out.frequency = validateBudgetFrequency(frequency)
     }
-
-    const out: NdebitData = {}
-    if (defined(rec, 'pointer')) out.pointer = rec.pointer as string
-    if (hasAmount) out.amount_sats = rec.amount_sats as number
-    if (bolt11) out.bolt11 = bolt11
-    if (hasFrequency) out.frequency = rec.frequency as BudgetFrequency
-    if (hasK1) out.k1 = rec.k1 as string
-    if (defined(rec, 'description')) out.description = rec.description as string
     return out
 }
 

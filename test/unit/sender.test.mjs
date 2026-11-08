@@ -40,12 +40,13 @@ function createMockPool({ onSubscribe, onPublish, replyFactory }) {
       subscribeCalled = true
       closed = false
       order.push('subscribe')
-      onSubscribe?.(relays, filter, opts)
       onevent = opts.onevent
+      onSubscribe?.(relays, filter, opts)
       return {
         close: () => {
           closed = true
           order.push('close')
+          opts.onclose?.([])
         },
       }
     },
@@ -53,12 +54,12 @@ function createMockPool({ onSubscribe, onPublish, replyFactory }) {
       publishCalled = true
       order.push('publish')
       assert.equal(subscribeCalled, true, 'publish must happen after subscribe')
-      onPublish?.(relays, event)
+      const attempts = onPublish?.(relays, event)
       const replies = replyFactory?.(event, onevent) ?? []
       for (const reply of replies) {
         queueMicrotask(() => onevent(reply))
       }
-      return [Promise.resolve('ok')]
+      return attempts ?? [Promise.resolve('ok')]
     },
   }
 }
@@ -71,11 +72,11 @@ const requestEvent = (clientPub, serverPub) => ({
   pubkey: clientPub,
 })
 
-const sendOffer = (pool, clientPriv, clientPub, serverPub, timeoutSeconds = 5, moreCb) =>
+const sendOffer = (pool, clientPriv, clientPub, serverPub, timeoutSeconds = 5, moreCb, relays = ['wss://relay.example.com']) =>
   sendRequest(
     pool,
     { privateKey: clientPriv, publicKey: clientPub },
-    ['wss://relay.example.com'],
+    relays,
     serverPub,
     requestEvent(clientPub, serverPub),
     21001,
@@ -84,7 +85,132 @@ const sendOffer = (pool, clientPriv, clientPub, serverPub, timeoutSeconds = 5, m
   )
 
 describe('sender lifecycle', () => {
-  it('preserves code 6 payer-data discovery and sends numeric quantity on explicit retry', async () => {
+  for (const payload of [
+    { code: 1, error: 'Offer unavailable' },
+    { code: 6, error: 'Missing payer data', payer_data: ['name', 'quantity'] },
+    { code: 6, bolt11: 'lnbc1dummy' },
+    { error: 'Invalid invoice', bolt11: 'lnbc1dummy' },
+    { bolt11: '' },
+    { bolt11: 123 },
+    { res: 'ok' },
+    {}, [], null, 'invalid',
+  ]) {
+    it(`closes without receipt polling for primary ${JSON.stringify(payload)}`, async (t) => {
+      t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+      const intervals = t.mock.method(globalThis, 'setInterval')
+      const timeouts = t.mock.method(globalThis, 'setTimeout')
+      const clientPriv = generateSecretKey()
+      const clientPub = getPublicKey(clientPriv)
+      const serverPriv = generateSecretKey()
+      const serverPub = getPublicKey(serverPriv)
+      const receipt = t.mock.fn()
+      let latest
+      let requestId
+      const pool = createMockPool({
+        onSubscribe: (_r, _f, opts) => {
+          latest = opts
+          opts.onclose([])
+        },
+        replyFactory: (request) => {
+          requestId = request.id
+          return [signedClinkReply(serverPriv, clientPub, request.id, payload, 21001)]
+        },
+      })
+
+      assert.deepEqual(await sendOffer(pool, clientPriv, clientPub, serverPub, 5, receipt), payload)
+      assert.equal(pool.wasClosed(), true)
+      assert.equal(intervals.mock.callCount(), 0)
+      const timeoutCount = timeouts.mock.callCount()
+      latest.onclose([])
+      await latest.onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001))
+      t.mock.timers.tick(12000)
+      assert.equal(pool.subscribeCount(), 1)
+      assert.equal(timeouts.mock.callCount(), timeoutCount)
+      assert.equal(receipt.mock.callCount(), 0)
+    })
+  }
+
+  it('does not wait for receipts for an invoice-shaped response of another kind', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    const intervals = t.mock.method(globalThis, 'setInterval')
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+    const pool = createMockPool({
+      replyFactory: (request) => [
+        signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21002),
+      ],
+    })
+
+    assert.deepEqual(await sendRequest(pool, { privateKey: clientPriv, publicKey: clientPub },
+      ['wss://relay.example.com'], serverPub, requestEvent(clientPub, serverPub), 21002, 5, t.mock.fn()),
+    { bolt11: 'lnbc1dummy' })
+    assert.equal(pool.wasClosed(), true)
+    assert.equal(intervals.mock.callCount(), 0)
+    t.mock.timers.tick(12000)
+    assert.equal(pool.subscribeCount(), 1)
+  })
+
+  it('closes a subscription returned after synchronous response callbacks, even if moreCb throws', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+    const receipt = t.mock.fn(() => { throw new Error('callback failed') })
+    const pool = createMockPool({
+      onSubscribe: (_r, filter, opts) => {
+        opts.onevent(signedClinkReply(serverPriv, clientPub, filter['#e'][0], { bolt11: 'lnbc1dummy' }, 21001))
+        opts.onevent(signedClinkReply(serverPriv, clientPub, filter['#e'][0], { res: 'ok' }, 21001))
+        opts.onevent(signedClinkReply(serverPriv, clientPub, filter['#e'][0], { res: 'ok' }, 21001))
+      },
+    })
+
+    assert.deepEqual(await sendOffer(pool, clientPriv, clientPub, serverPub, 5, receipt), { bolt11: 'lnbc1dummy' })
+    assert.equal(receipt.mock.callCount(), 1)
+    assert.equal(pool.wasClosed(), true)
+    t.mock.timers.tick(12000)
+    assert.equal(pool.subscribeCount(), 1)
+  })
+
+  it('periodically resubscribes, ignores stale callbacks, and cleans up after receipt callback errors', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    const clientPriv = generateSecretKey()
+    const clientPub = getPublicKey(clientPriv)
+    const serverPriv = generateSecretKey()
+    const serverPub = getPublicKey(serverPriv)
+    const subscriptions = []
+    let requestId
+    const receipt = t.mock.fn(() => { throw new Error('callback failed') })
+    const pool = createMockPool({
+      onSubscribe: (_r, _f, opts) => subscriptions.push(opts),
+      replyFactory: (request) => {
+        requestId = request.id
+        return [signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21001)]
+      },
+    })
+
+    await sendOffer(pool, clientPriv, clientPub, serverPub, 5, receipt)
+    t.mock.timers.tick(4000)
+    assert.equal(pool.subscribeCount(), 2)
+    const reply = signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001)
+    subscriptions[0].onclose([])
+    await subscriptions[0].onevent(reply)
+    assert.equal(receipt.mock.callCount(), 0)
+    t.mock.timers.tick(500)
+    assert.equal(pool.subscribeCount(), 2)
+    await subscriptions[1].onevent(reply)
+    assert.equal(receipt.mock.callCount(), 1)
+    assert.equal(pool.wasClosed(), true)
+    await subscriptions[1].onevent(reply)
+    t.mock.timers.tick(12000)
+    assert.equal(receipt.mock.callCount(), 1)
+    assert.equal(pool.subscribeCount(), 2)
+  })
+
+  it('preserves code 6 payer-data discovery and sends numeric quantity on explicit retry', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
     const serverPriv = generateSecretKey()
@@ -106,10 +232,14 @@ describe('sender lifecycle', () => {
       zap: undefined, expires_in_seconds: undefined, payer_data: undefined,
     }
 
-    const response = await SendNofferRequest(pool, clientPriv, ['wss://relay.example.com'], serverPub, request, 5)
+    const receipt = t.mock.fn()
+    const response = await SendNofferRequest(pool, clientPriv, ['wss://relay.example.com'], serverPub, request, 5, receipt)
     assert.deepEqual(response, discovery)
     assert.deepEqual(payloads, [{ offer: 'o', amount_sats: 21, description: request.description }])
     assert.equal(pool.wasClosed(), true)
+    t.mock.timers.tick(12000)
+    assert.equal(pool.subscribeCount(), 1)
+    assert.equal(receipt.mock.callCount(), 0)
 
     const retry = await SendNofferRequest(pool, clientPriv, ['wss://relay.example.com'], serverPub, {
       ...request, payer_data: { name: 'Alice', quantity: 2, email: undefined },
@@ -173,7 +303,8 @@ describe('sender lifecycle', () => {
     assert.equal(pool.wasClosed(), true)
   })
 
-  it('resubscribes after close and still delivers the receipt', async () => {
+  it('resubscribes after close and still delivers the receipt', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
     const serverPriv = generateSecretKey()
@@ -198,7 +329,7 @@ describe('sender lifecycle', () => {
 
     assert.equal(pool.subscribeCount(), 1)
     latest.onclose(['closed'])
-    await new Promise(resolve => setTimeout(resolve, 600))
+    t.mock.timers.tick(500)
     assert.ok(pool.subscribeCount() >= 2)
 
     await latest.onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001))
@@ -207,7 +338,8 @@ describe('sender lifecycle', () => {
     assert.equal(pool.wasClosed(), true)
   })
 
-  it('ignores a replayed invoice after resubscribe and still delivers the receipt', async () => {
+  it('ignores a replayed invoice after resubscribe and still delivers the receipt', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
     const clientPriv = generateSecretKey()
     const clientPub = getPublicKey(clientPriv)
     const serverPriv = generateSecretKey()
@@ -231,7 +363,7 @@ describe('sender lifecycle', () => {
     })
 
     latest.onclose(['closed'])
-    await new Promise(resolve => setTimeout(resolve, 600))
+    t.mock.timers.tick(500)
     await latest.onevent(signedClinkReply(serverPriv, clientPub, requestId, { bolt11: 'lnbc1dummy' }, 21001))
 
     assert.equal(receipt, null)
@@ -508,6 +640,131 @@ describe('sender lifecycle', () => {
       (err) => err instanceof Error && err.message === 'failed to get response in time'
     )
     assert.equal(pool.wasClosed(), true)
+  })
+})
+
+describe('relay publication', () => {
+  const clientPriv = generateSecretKey()
+  const clientPub = getPublicKey(clientPriv)
+  const serverPriv = generateSecretKey()
+  const serverPub = getPublicKey(serverPriv)
+  const relays = ['wss://failed.example.com', 'wss://working.example.com']
+
+  for (const failedIndex of [0, 1]) {
+    it(`waits for a delayed reply despite relay ${failedIndex} rejecting publication`, async (t) => {
+      t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+      const pool = createMockPool({
+        onPublish: (urls) => {
+          assert.deepEqual(urls, relays)
+          return urls.map((_, index) => index === failedIndex
+            ? Promise.reject(new Error('relay refused')) : Promise.resolve('ok'))
+        },
+        replyFactory: (request, onevent) => {
+          setTimeout(() => onevent(signedClinkReply(serverPriv, clientPub, request.id,
+            { bolt11: 'lnbc1dummy' }, 21001)), 50)
+        },
+      })
+      const response = sendOffer(pool, clientPriv, clientPub, serverPub, 5, undefined, relays)
+      const checked = assert.doesNotReject(async () => {
+        assert.deepEqual(await response, { bolt11: 'lnbc1dummy' })
+      })
+      await Promise.resolve()
+      assert.equal(pool.wasClosed(), false)
+      t.mock.timers.tick(50)
+      await checked
+      assert.equal(pool.wasClosed(), true)
+      t.mock.timers.tick(12000)
+      assert.equal(pool.subscribeCount(), 1)
+    })
+  }
+
+  it('rejects and cleans up only after every publish attempt fails', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    const lastError = new Error('last relay refused')
+    let latest
+    const receipt = t.mock.fn()
+    const pool = createMockPool({
+      onSubscribe: (_r, _f, opts) => { latest = opts },
+      onPublish: () => [
+        Promise.reject(new Error('first relay refused')),
+        new Promise((_res, rej) => setTimeout(() => rej(lastError), 50)),
+      ],
+    })
+    const rejected = assert.rejects(
+      sendOffer(pool, clientPriv, clientPub, serverPub, 5, receipt, relays),
+      (error) => error === lastError,
+    )
+    await Promise.resolve()
+    assert.equal(pool.wasClosed(), false)
+    t.mock.timers.tick(50)
+    await rejected
+    assert.equal(pool.wasClosed(), true)
+    latest.onclose([])
+    t.mock.timers.tick(12000)
+    assert.equal(pool.subscribeCount(), 1)
+    assert.equal(receipt.mock.callCount(), 0)
+  })
+
+  it('preserves an accepted invoice and receipt waiting when all publish rejections arrive late', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    let latest
+    let requestId
+    const receipt = t.mock.fn()
+    const pool = createMockPool({
+      onSubscribe: (_r, _f, opts) => { latest = opts },
+      onPublish: () => relays.map(() => new Promise((_res, rej) => {
+        setTimeout(() => rej(new Error('late rejection')), 50)
+      })),
+      replyFactory: (request) => {
+        requestId = request.id
+        return [signedClinkReply(serverPriv, clientPub, request.id, { bolt11: 'lnbc1dummy' }, 21001)]
+      },
+    })
+
+    assert.deepEqual(await sendOffer(pool, clientPriv, clientPub, serverPub, 5, receipt, relays),
+      { bolt11: 'lnbc1dummy' })
+    t.mock.timers.tick(50)
+    await Promise.resolve()
+    assert.equal(pool.wasClosed(), false)
+    t.mock.timers.tick(4000)
+    assert.equal(pool.subscribeCount(), 2)
+    await latest.onevent(signedClinkReply(serverPriv, clientPub, requestId, { res: 'ok' }, 21001))
+    assert.equal(receipt.mock.callCount(), 1)
+    assert.equal(pool.wasClosed(), true)
+    t.mock.timers.tick(12000)
+    assert.equal(pool.subscribeCount(), 2)
+  })
+
+  for (const [name, onPublish, message] of [
+    ['synchronous publish throws', () => { throw new Error('publish threw') }, /publish threw/],
+    ['empty publish results', () => [], /no publish attempts returned/],
+  ]) {
+    it(`rejects and cleans up on ${name}`, async (t) => {
+      t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+      let latest
+      const pool = createMockPool({
+        onSubscribe: (_r, _f, opts) => { latest = opts },
+        onPublish,
+      })
+
+      await assert.rejects(sendOffer(pool, clientPriv, clientPub, serverPub, 5, t.mock.fn(), relays), message)
+      assert.equal(pool.wasClosed(), true)
+      latest.onclose([])
+      t.mock.timers.tick(12000)
+      assert.equal(pool.subscribeCount(), 1)
+    })
+  }
+
+  it('rejects empty relays without subscribing, publishing, or starting timers', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+    const timeouts = t.mock.method(globalThis, 'setTimeout')
+    const intervals = t.mock.method(globalThis, 'setInterval')
+    const pool = createMockPool({})
+
+    await assert.rejects(sendOffer(pool, clientPriv, clientPub, serverPub, 5, t.mock.fn(), []), /no relays provided/)
+    assert.deepEqual(pool.order, [])
+    assert.equal(timeouts.mock.callCount(), 0)
+    assert.equal(intervals.mock.callCount(), 0)
   })
 })
 
