@@ -105,12 +105,13 @@ export type NdebitFailure = {
 }
 export type NdebitResponse = NdebitSuccess | NdebitFailure
 
-export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NdebitData, timeoutSeconds?: number): Promise<NdebitResponse> => {
+export const SendNdebitRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NdebitData, timeoutSeconds?: number, signal?: AbortSignal): Promise<NdebitResponse> => {
+    signal?.throwIfAborted()
     const payload = validateNdebitData(data)
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(payload), getConversationKey(privateKey, toPubKey))
     const event = newNdebitEvent(content, publicKey, toPubKey)
-    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, 21002, timeoutSeconds)
+    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, 21002, timeoutSeconds, undefined, signal)
 }
 
 

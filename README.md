@@ -153,6 +153,8 @@ Receipt callbacks keep listening only after an invoice response. Discovery and o
 
 Each TLV value is limited to 255 bytes, measured after UTF-8 encoding for strings. Oversized offer IDs, pointers, relay URLs, and currency values are rejected before encoding.
 
+All pointer encoders require a public key representing exactly 32 raw bytes (64 hexadecimal characters). Compressed 33-byte keys, truncated keys, and other lengths are rejected before a pointer is produced.
+
 Encoded offer prices support integers from `0` through `Number.MAX_SAFE_INTEGER`. Existing nonzero 32-bit prices retain their four-byte encoding; larger prices use lossless wider big-endian values. An explicit zero price is encoded as zero rather than omitted. An absent price remains optional, and currency cannot be combined with any supplied price, including zero. Decoding rejects empty or unsafe price values instead of returning a rounded number.
 
 Both `nip19.decode` and `nip19.decodeNostrURI` enforce printable ASCII. The URI helper retains its `{ type: 'invalid', data: null }` result for invalid inputs.
@@ -309,7 +311,10 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
 - `Nenroll(opts?: { difficulty?: number }, timeoutSeconds?: number)`
   - Sends a kind `21004` Enroll request (`{}`). Mines NIP-13 when `difficulty > 0`, up to `MAX_ENROLL_POW_BITS` (24). If `difficulty` is omitted, uses a fresh beacon’s `enroll_difficulty` when present and in range, otherwise probes and remine once on GFY `5`.
 - `Stop()`
-  - Closes relay connections on the internal pool. Call when finished so the process can exit cleanly.
+  - Cancels this instance's active requests, receipt polling, and relisten timers before closing pool connections. Pending promises reject with `AbortError`; already-resolved invoices remain resolved, but their receipt listeners stop.
+  - Shutdown is terminal and repeated calls are harmless. Network methods on a stopped instance reject without reconnecting; create a new instance to resume. An injected pool is still destroyed as before.
+
+Standalone `SendNofferRequest`, `SendNdebitRequest`, `SendNmanageRequest`, `SendNenrollRequest`, and `FetchClinkBeacon` accept an optional trailing `AbortSignal` for caller-controlled cancellation. The abort reason is preserved. Cancellation stops SDK activity; it does not undo a request that the host may already have accepted.
 
 
 ### Encoding/Decoding

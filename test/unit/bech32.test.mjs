@@ -19,6 +19,9 @@ import {
 const fixtures = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../fixtures/bech32.json'), 'utf8')
 )
+const interop = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../test-vectors/interop.json'), 'utf8')
+)
 
 const utf8 = new TextEncoder()
 
@@ -142,6 +145,23 @@ describe('bech32 round-trip', () => {
   })
 })
 
+describe('published bech32 interop vectors', () => {
+  const encoders = { noffer: nofferEncode, ndebit: ndebitEncode, nmanage: nmanageEncode }
+
+  for (const [name, { encoded, decoded }] of Object.entries(interop.bech32_roundtrip)) {
+    it(`decodes and exactly re-encodes ${name}`, () => {
+      const type = encoded.slice(0, encoded.indexOf('1'))
+      const result = decodeBech32(encoded)
+      assert.equal(result.type, type)
+      for (const [field, value] of Object.entries(decoded)) {
+        assert.equal(result.data[field], value)
+      }
+      assert.equal(encoders[type](decoded), encoded)
+      assert.equal(encoders[type](result.data), encoded)
+    })
+  }
+})
+
 describe('noffer prices', () => {
   const pointer = { ...fixtures.noffer.decoded, priceType: OfferPriceType.Fixed }
   const fields = {
@@ -187,7 +207,10 @@ describe('noffer prices', () => {
   })
 
   it('accepts exact external integer widths and infers fixed pricing even for zero', () => {
-    for (const [hex, price] of [['00', 0], ['01', 1], ['001fffffffffffff', Number.MAX_SAFE_INTEGER]]) {
+    for (const [hex, price] of [
+      ['00', 0], ['01', 1], ['0001', 1], ['001fffffffffffff', Number.MAX_SAFE_INTEGER],
+      ['00'.repeat(255), 0], ['00'.repeat(248) + '1fffffffffffff', Number.MAX_SAFE_INTEGER],
+    ]) {
       const decoded = decodeBech32(encodeNofferTlv({ ...fields, 4: hexToBytes(hex) })).data
       assert.equal(decoded.price, price)
       assert.equal(decoded.priceType, OfferPriceType.Fixed)
@@ -222,6 +245,19 @@ describe('TLV encoding limits', () => {
   ]
 
   for (const [kind, encode, pointer, identifier] of encoders) {
+    for (const length of [0, 1, 31, 33, 64, 255]) {
+      it(`rejects a ${length}-byte ${kind} pubkey before encoding`, () => {
+        assert.throws(() => encode({ ...pointer, pubkey: 'ab'.repeat(length) }), /pubkey buffer should be 32 bytes/)
+      })
+    }
+
+    it(`preserves a valid 32-byte ${kind} pubkey and its fixture encoding`, () => {
+      const encoded = encode(pointer)
+      if (fixtures[kind].encoded) assert.equal(encoded, fixtures[kind].encoded)
+      assert.equal(decodeBech32(encoded).data.pubkey, pointer.pubkey)
+      assert.equal(encode({ ...pointer, pubkey: pointer.pubkey.toUpperCase() }), encoded)
+    })
+
     for (const field of [identifier, 'relay']) {
       it(`checks the UTF-8 byte length of ${kind} ${field}`, () => {
         for (const value of ['a'.repeat(255), '\u00e9'.repeat(127) + 'a']) {

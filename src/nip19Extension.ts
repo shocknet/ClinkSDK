@@ -197,6 +197,8 @@ function parseTLV(data: Uint8Array): TLV {
 
 
 export const nofferEncode = (offer: OfferPointer): string => {
+  const pubkey = hexToBytes(offer.pubkey)
+  if (pubkey.length !== 32) throw new Error('raw pubkey buffer should be 32 bytes')
   if (offer.currency !== undefined) {
     if (offer.priceType !== OfferPriceType.Variable) {
       throw new Error('noffer currency requires variable price type')
@@ -206,7 +208,7 @@ export const nofferEncode = (offer: OfferPointer): string => {
     }
   }
   const o: TLV = {
-    0: [hexToBytes(offer.pubkey)],
+    0: [pubkey],
     1: [utf8Encoder.encode(offer.relay)],
     2: [utf8Encoder.encode(offer.offer)],
     3: [new Uint8Array([Number(offer.priceType)])],
@@ -223,8 +225,10 @@ export const nofferEncode = (offer: OfferPointer): string => {
 }
 
 export const ndebitEncode = (debit: DebitPointer): string => {
+  const pubkey = hexToBytes(debit.pubkey)
+  if (pubkey.length !== 32) throw new Error('raw pubkey buffer should be 32 bytes')
   const o: TLV = {
-    0: [hexToBytes(debit.pubkey)],
+    0: [pubkey],
     1: [utf8Encoder.encode(debit.relay)],
   }
   if (debit.pointer) {
@@ -241,8 +245,10 @@ export const ndebitEncode = (debit: DebitPointer): string => {
 }
 
 export const nmanageEncode = (manage: ManagePointer): string => {
+  const pubkey = hexToBytes(manage.pubkey)
+  if (pubkey.length !== 32) throw new Error('raw pubkey buffer should be 32 bytes')
   const o: TLV = {
-    0: [hexToBytes(manage.pubkey)],
+    0: [pubkey],
     1: [utf8Encoder.encode(manage.relay)],
   }
   if (manage.pointer) {

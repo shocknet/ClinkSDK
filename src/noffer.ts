@@ -70,12 +70,13 @@ export type NofferSuccess = { bolt11: string }
 export type NofferError = { code: number, error: string, range?: { min: number, max: number }, latest?: string, payer_data?: string[] }
 export type NofferResponse = NofferSuccess | NofferError
 
-export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void): Promise<NofferResponse> => {
+export const SendNofferRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NofferData, timeoutSeconds = 30, onReceipt?: (receipt: NofferReceipt) => void, signal?: AbortSignal): Promise<NofferResponse> => {
+    signal?.throwIfAborted()
     const payload = validateNofferData(data)
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(payload), getConversationKey(privateKey, toPubKey))
     const event = newNofferEvent(content, publicKey, toPubKey)
-    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, CLINK_OFFER_KIND, timeoutSeconds, onReceipt)
+    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, CLINK_OFFER_KIND, timeoutSeconds, onReceipt, signal)
 }
 
 export const newNofferEvent = (content: string, fromPub: string, toPub: string) => ({

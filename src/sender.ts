@@ -64,7 +64,8 @@ type Pair = { privateKey: Uint8Array, publicKey: string }
 const RECEIPT_RESUBSCRIBE_MS = 4000
 const RELISTEN_MS = 500
 
-export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relays: string[], toPub: string, e: UnsignedEvent, kindExpected: number, timeoutSeconds?: number, moreCb?: (data: any) => void): Promise<T> => {
+export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relays: string[], toPub: string, e: UnsignedEvent, kindExpected: number, timeoutSeconds?: number, moreCb?: (data: any) => void, signal?: AbortSignal): Promise<T> => {
+    signal?.throwIfAborted()
     if (relays.length === 0) {
         throw new Error('no relays provided')
     }
@@ -110,6 +111,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             }
             finished = true
             stopTimers()
+            signal?.removeEventListener('abort', onAbort)
             closer.close()
         }
 
@@ -122,15 +124,23 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             rej(err)
         }
 
+        const onAbort = () => {
+            if (settled) {
+                cleanup()
+            } else {
+                fail(signal!.reason)
+            }
+        }
+
         const waitForReceipt = () => {
-            if (finished || resubTimer !== null) {
+            if (finished || signal?.aborted || resubTimer !== null) {
                 return
             }
             resubTimer = setInterval(listen, RECEIPT_RESUBSCRIBE_MS)
         }
 
         const listen = () => {
-            if (finished) {
+            if (finished || signal?.aborted) {
                 return
             }
             if (relistenTimer !== null) {
@@ -140,9 +150,12 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
             const gen = ++listenGen
             log(`[ClinkSDK] Setting up subscription with filter:`, JSON.stringify(filter, null, 2))
             closer.close()
+            if (finished || signal?.aborted) {
+                return
+            }
             const subscription = pool.subscribe(relays, filter, {
                 onevent: async (event) => {
-                    if (finished || gen !== listenGen) {
+                    if (finished || signal?.aborted || gen !== listenGen) {
                         return
                     }
                     log(`[ClinkSDK] Received response event: kind=${event.kind}, eventId=${event.id}, from=${event.pubkey}`)
@@ -187,7 +200,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                     log(`[ClinkSDK] End of stored events received for eventId=${signed.id}`)
                 },
                 onclose: () => {
-                    if (finished || gen !== listenGen || relistenTimer !== null) {
+                    if (finished || signal?.aborted || gen !== listenGen || relistenTimer !== null) {
                         return
                     }
                     log(`[ClinkSDK] Subscription closed, listening again for eventId=${signed.id}`)
@@ -195,11 +208,17 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
                 },
             })
             // subscribe may invoke callbacks before returning its closer.
-            if (finished || gen !== listenGen) {
+            if (finished || signal?.aborted || gen !== listenGen) {
                 subscription.close()
             } else {
                 closer = subscription
             }
+        }
+
+        signal?.addEventListener('abort', onAbort, { once: true })
+        if (signal?.aborted) {
+            onAbort()
+            return
         }
 
         if (timeoutSeconds) {
@@ -211,7 +230,7 @@ export const sendRequest = async <T>(pool: AbstractSimplePool, pair: Pair, relay
 
         try {
             listen()
-            if (finished) {
+            if (finished || signal?.aborted) {
                 return
             }
             const attempts = pool.publish(relays, signed)

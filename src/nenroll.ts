@@ -41,14 +41,16 @@ const sendEnrollOnce = (
     toPubKey: string,
     bits: number,
     timeoutSeconds?: number,
+    signal?: AbortSignal,
 ): Promise<NenrollResponse> => {
+    signal?.throwIfAborted()
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify({}), getConversationKey(privateKey, toPubKey))
     let event = newNenrollEvent(content, publicKey, toPubKey)
     if (bits > 0) {
         event = mineNip13(event, bits)
     }
-    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, CLINK_ENROLL_KIND, timeoutSeconds)
+    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, CLINK_ENROLL_KIND, timeoutSeconds, undefined, signal)
 }
 
 export const SendNenrollRequest = async (
@@ -58,12 +60,15 @@ export const SendNenrollRequest = async (
     toPubKey: string,
     difficulty = 0,
     timeoutSeconds?: number,
+    signal?: AbortSignal,
 ): Promise<NenrollResponse> => {
+    signal?.throwIfAborted()
     const used = difficulty > 0 ? difficulty : 0
     if (used > 0 && !enrollPowBitsOk(used)) {
         throw new Error(`enroll PoW difficulty ${used} exceeds max`)
     }
-    const first = await sendEnrollOnce(pool, privateKey, relays, toPubKey, used, timeoutSeconds)
+    const first = await sendEnrollOnce(pool, privateKey, relays, toPubKey, used, timeoutSeconds, signal)
+    signal?.throwIfAborted()
     if (!isGfy5(first)) {
         return first
     }
@@ -71,5 +76,5 @@ export const SendNenrollRequest = async (
     if (typeof required !== "number" || !enrollPowBitsOk(required) || required <= used) {
         return first
     }
-    return sendEnrollOnce(pool, privateKey, relays, toPubKey, required, timeoutSeconds)
+    return sendEnrollOnce(pool, privateKey, relays, toPubKey, required, timeoutSeconds, signal)
 }
