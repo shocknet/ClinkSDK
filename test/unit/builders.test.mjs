@@ -18,6 +18,7 @@ describe('request builders', () => {
       amount_sats: 5000,
       pointer: 'ptr',
     })
+    assert.deepEqual(newNdebitPaymentRequest('lnbc1test'), { bolt11: 'lnbc1test' })
   })
 
   it('builds ndebit payment request with k1', () => {
@@ -29,6 +30,13 @@ describe('request builders', () => {
       k1,
     })
     assert.throws(() => newNdebitPaymentRequest('lnbc1test', 5000, 'ptr', 'not-a-k1'))
+    assert.throws(() => newNdebitPaymentRequest('', 5000, 'ptr'))
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', 0, 'ptr'))
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', -1, 'ptr'))
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', 1.5, 'ptr'))
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', Number.NaN, 'ptr'))
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', Number.POSITIVE_INFINITY, 'ptr'))
+    assert.throws(() => newNdebitPaymentRequest('lnbc1test', Number.MAX_SAFE_INTEGER + 1, 'ptr'))
   })
 
   it('builds ndebit payment request with description', () => {
@@ -45,6 +53,7 @@ describe('request builders', () => {
 
   it('builds ndebit full access request', () => {
     assert.deepEqual(newNdebitFullAccessRequest('ptr'), { pointer: 'ptr' })
+    assert.deepEqual(newNdebitFullAccessRequest(), {})
   })
 
   it('builds ndebit budget request', () => {
@@ -53,6 +62,10 @@ describe('request builders', () => {
       frequency: { number: 1, unit: 'week' },
       pointer: 'ptr',
     })
+    assert.throws(() =>
+      newNdebitBudgetRequest({ number: Number.MAX_SAFE_INTEGER + 1, unit: 'week' }, 1000)
+    )
+    assert.throws(() => newNdebitBudgetRequest({ number: 1, unit: 'year' }, 1000))
   })
 
   it('builds ndebit budget request with description', () => {

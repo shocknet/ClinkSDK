@@ -1,5 +1,5 @@
 import { nip44, getPublicKey } from "nostr-tools"
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import type { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { sendRequest } from "./sender.js"
 const { getConversationKey, encrypt } = nip44
 
@@ -143,11 +143,12 @@ export const validateNmanageRequest = (data: unknown): NmanageRequest => {
     }
 }
 
-export const SendNmanageRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NmanageRequest, timeoutSeconds?: number): Promise<NmanageResponse> => {
+export const SendNmanageRequest = async (pool: AbstractSimplePool, privateKey: Uint8Array, relays: string[], toPubKey: string, data: NmanageRequest, timeoutSeconds?: number, signal?: AbortSignal): Promise<NmanageResponse> => {
+    signal?.throwIfAborted()
     const publicKey = getPublicKey(privateKey)
     const content = encrypt(JSON.stringify(data), getConversationKey(privateKey, toPubKey))
     const event = newNmanageEvent(content, publicKey, toPubKey)
-    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, 21003, timeoutSeconds)
+    return sendRequest(pool, { privateKey, publicKey }, relays, toPubKey, event, 21003, timeoutSeconds, undefined, signal)
 }
 
 export const newNmanageEvent = (content: string, fromPub: string, toPub: string) => ({

@@ -111,7 +111,7 @@ const sdk = new ClinkSDK({
 
 const request: NofferData = {
   offer: decoded.data.offer,
-  amount_sats: 1000, // sats (optional for variable/spontaneous offers)
+  amount_sats: 1000, // payer-selected unit price in sats for spontaneous offers
   description: 'coffee for bob', // optional, max 100 chars
   expires_in_seconds: 3600, // optional
   payer_data: { name: 'Alice' }, // optional
@@ -130,6 +130,35 @@ sdk.Noffer(request, receiptCallback).then(response => {
 });
 ```
 
+#### Payer Data Discovery and Quantity
+
+An offer host can respond with code `6` and `payer_data: string[]` listing the required payer-data keys. Treat this as discovery: collect the requested values and explicitly retry the same offer with `payer_data` populated. The SDK preserves the list but does not collect values or retry automatically. For example, after receiving `{ code: 6, error: 'Missing payer data', payer_data: ['name', 'quantity'] }`:
+
+```ts
+const retry = await sdk.Noffer({
+  ...request,
+  payer_data: { ...request.payer_data, name: 'Alice', quantity: 2 },
+});
+```
+
+The exact key `quantity` must be a positive safe integer JSON number, not a string. All other payer-data values must be strings. Undefined optional fields are treated as omitted. Invalid outgoing requests are rejected locally before encryption or relay contact.
+
+When supplied, `amount_sats` must be a positive safe integer and `expires_in_seconds` must be a non-negative safe integer. Zero expiry is permitted; the host determines the resulting invoice expiry. Fractions, non-finite numbers, and unsafe integers are rejected rather than rounded or serialized as `null`.
+
+Offer price categories describe the **unit price**: `Fixed = 0` is a fixed unit price, `Variable = 1` is resolved by the host on request, and `Spontaneous = 2` uses the payer's `amount_sats` as the unit price. Quantity multiplies the unit price only when the host's required payer-data list includes `quantity`; merely sending it does not enable multiplication. The host computes the invoice total, and wallets must verify that total before payment. The SDK client is not a pricing engine.
+
+Receipt callbacks keep listening only after an invoice response. Discovery and other error responses close their subscriptions immediately; they cannot produce a receipt for that attempt.
+
+#### Encoding Bounds
+
+Each TLV value is limited to 255 bytes, measured after UTF-8 encoding for strings. Oversized offer IDs, pointers, relay URLs, and currency values are rejected before encoding.
+
+All pointer encoders require a public key representing exactly 32 raw bytes (64 hexadecimal characters). Compressed 33-byte keys, truncated keys, and other lengths are rejected before a pointer is produced.
+
+Encoded offer prices support integers from `0` through `Number.MAX_SAFE_INTEGER`. Existing nonzero 32-bit prices retain their four-byte encoding; larger prices use lossless wider big-endian values. An explicit zero price is encoded as zero rather than omitted. An absent price remains optional, and currency cannot be combined with any supplied price, including zero. Decoding rejects empty or unsafe price values instead of returning a rounded number.
+
+Both `nip19.decode` and `nip19.decodeNostrURI` enforce printable ASCII. The URI helper retains its `{ type: 'invalid', data: null }` result for invalid inputs.
+
 ### 3. Sending a CLINK Debit Request
 
 ```ts
@@ -140,6 +169,7 @@ import {
   newNdebitPaymentRequest,
   newNdebitFullAccessRequest,
   newNdebitBudgetRequest,
+  gfy6Reason,
 } from '@shocknet/clink-sdk';
 
 // Session flow: scan ndebit QR, pay with matching k1
@@ -178,7 +208,17 @@ sdk.Ndebit(simplePaymentRequest).then(response => {
       console.log('Payment settled internally.');
     }
   } else if (response.res === 'GFY') {
-    console.error('Debit error:', response.error);
+    if (response.reason === gfy6Reason.invoiceAlreadyFailed) {
+      console.error('Submit a new invoice')
+    } else if (response.reason === gfy6Reason.k1AlreadyProcessed) {
+      console.error('Session already used')
+    } else if (response.reason === gfy6Reason.invoiceInProgress) {
+      console.error('Wait for the in-flight payment')
+    } else if (response.reason === gfy6Reason.invoiceAlreadyPaid) {
+      console.error('Invoice already paid')
+    } else {
+      console.error('Debit error:', response.code, response.error)
+    }
   }
 });
 
@@ -271,7 +311,10 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
 - `Nenroll(opts?: { difficulty?: number }, timeoutSeconds?: number)`
   - Sends a kind `21004` Enroll request (`{}`). Mines NIP-13 when `difficulty > 0`, up to `MAX_ENROLL_POW_BITS` (24). If `difficulty` is omitted, uses a fresh beacon’s `enroll_difficulty` when present and in range, otherwise probes and remine once on GFY `5`.
 - `Stop()`
-  - Closes relay connections on the internal pool. Call when finished so the process can exit cleanly.
+  - Cancels this instance's active requests, receipt polling, and relisten timers before closing pool connections. Pending promises reject with `AbortError`; already-resolved invoices remain resolved, but their receipt listeners stop.
+  - Shutdown is terminal and repeated calls are harmless. Network methods on a stopped instance reject without reconnecting; create a new instance to resume. An injected pool is still destroyed as before.
+
+Standalone `SendNofferRequest`, `SendNdebitRequest`, `SendNmanageRequest`, `SendNenrollRequest`, and `FetchClinkBeacon` accept an optional trailing `AbortSignal` for caller-controlled cancellation. The abort reason is preserved. Cancellation stops SDK activity; it does not undo a request that the host may already have accepted.
 
 
 ### Encoding/Decoding
@@ -281,6 +324,7 @@ ClinkSDK.fromNprofile(nprofile: string, privateKey: Uint8Array, opts?: { default
 - `decodeBech32(nip19: string): DecodeResult`
 - `generateK1(): string` — 32-byte session identifier as lowercase hex (ndebit TLV `3`)
 - `validateK1(k1: unknown): string` — throws unless `k1` is 64 lowercase hex chars; returns it unchanged
+- `gfy6Reason` — GFY code 6 `reason` tokens (`k1_already_processed`, `invoice_in_progress`, `invoice_already_failed`, `invoice_already_paid`)
 - `isNofferReceipt(parsed: unknown): parsed is NofferReceipt` — `{ res: "ok" }` with optional 64-char hex `preimage`
 
 ### Validators
@@ -289,6 +333,10 @@ For validating inbound/outbound CLINK payloads (e.g. server-side request checks)
 
 - `validateNofferData`, `validateNdebitData`, `validateK1`, `validateBudgetFrequency`
 - `validateNmanageRequest` and per-action helpers: `validateNmanageCreateOffer`, `validateNmanageUpdateOffer`, `validateNmanageDeleteOffer`, `validateNmanageGetOffer`, `validateNmanageListOffers`, `validateOfferFields`
+
+`validateNofferData`, `validateNdebitData`, and `validateBudgetFrequency` return detached, normalized objects rather than the original input. They read recognized values once, omit undefined optional fields and unknown top-level fields, and copy nested payer-data or frequency values. Offer and debit sending serialize this validated payload, not caller-defined `toJSON()` output.
+
+When publishing to multiple relays, one rejection does not abort another relay's accepted request. Publication fails only when all attempts fail; an empty relay list is rejected. A timeout or publication error is not proof that the host did not act, so callers must not blindly retry payments.
 
 ### Debug
 - `setDebug(enabled: boolean)` — when `true`, logs relay subscribe/publish/response lifecycle to the console (default `false`)
@@ -310,11 +358,13 @@ Pinned by this package — import these from `@shocknet/clink-sdk`, not from a s
 | `UnsignedEvent` | type | Event shape before `finalizeEvent` |
 
 ### Types
-- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: Record<string, string> }`
-- **`NofferResponse`**: `{ bolt11: string } | { code: number, error: string, range?: { min: number, max: number }, latest?: string }`
+- **`NofferPayerData`**: `Record<string, string | number> & { quantity?: number }` - runtime validation permits numbers only for the exact `quantity` key, as positive safe integers
+- **`NofferData`**: `{ offer: string, amount_sats?: number, description?: string, expires_in_seconds?: number, zap?: string, payer_data?: NofferPayerData }`
+- **`NofferError`**: `{ code: number, error: string, range?: { min: number, max: number }, latest?: string, payer_data?: string[] }` - code `6` can list required payer-data keys for discovery and retry
+- **`NofferResponse`**: `{ bolt11: string } | NofferError`
 - **`NofferReceipt`**: `{ res: 'ok', preimage?: string }` — Lightning receipts include `preimage`; internal settlement omits it
 - **`NdebitData`**: `{ pointer?: string, amount_sats?: number, bolt11?: string, frequency?: BudgetFrequency, k1?: string, description?: string }`
-- **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number }`
+- **`NdebitResponse`**: `{ res: 'ok', preimage?: string } | { res: 'GFY', error: string, code: number, reason?: Gfy6Reason, delta?: { max_delta_ms: number, actual_delta_ms: number }, retry_after?: number, range?: { min: number, max: number } }`
 - **`OfferPointer`**: `{ pubkey: string, relay: string, offer: string, priceType: OfferPriceType, price?: number, currency?: string }`
 - **`DebitPointer`**: `{ pubkey: string, relay: string, pointer?: string, k1?: string }`
 - **`OfferPriceType`**: `enum { Fixed = 0, Variable = 1, Spontaneous = 2 }`

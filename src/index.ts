@@ -1,5 +1,6 @@
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
-import { SimplePool, getPublicKey, nip19, generateSecretKey, finalizeEvent, nip44, verifyEvent, type UnsignedEvent } from "nostr-tools"
+import type { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
+import { SimplePool, getPublicKey, generateSecretKey, finalizeEvent, nip44, verifyEvent, type UnsignedEvent } from "nostr-tools"
+import { nip19 } from "./nip19Strict.js"
 import { SendNofferRequest, NofferData, NofferReceipt } from "./noffer.js"
 import { NdebitData, SendNdebitRequest, generateK1, validateK1, newNdebitBudgetRequest, newNdebitPaymentRequest } from "./ndebit.js"
 import { NmanageRequest, SendNmanageRequest, newListRequest } from "./nmanage.js"
@@ -35,6 +36,7 @@ const nprofileSettings = (nprofile: string, privateKey: Uint8Array, extra?: Pick
 export class ClinkSDK {
     pool: AbstractSimplePool
     settings: ClinkSettings
+    private readonly shutdown = new AbortController()
     constructor(settings: ClinkSettings, pool?: AbstractSimplePool) {
         this.settings = settings
         if (pool) {
@@ -49,29 +51,34 @@ export class ClinkSDK {
     }
 
     Noffer = (data: NofferData, onReceipt?: (receipt: NofferReceipt) => void, timeoutSeconds?: number) => {
-        return SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, onReceipt)
+        return SendNofferRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, onReceipt, this.shutdown.signal)
     }
 
     Ndebit = (data: NdebitData, timeoutSeconds?: number) => {
-        return SendNdebitRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
+        return SendNdebitRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, this.shutdown.signal)
     }
 
     Nmanage = (data: NmanageRequest, timeoutSeconds?: number) => {
-        return SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds)
+        return SendNmanageRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, data, timeoutSeconds || this.settings.defaultTimeoutSeconds, this.shutdown.signal)
     }
 
     Nbeacon = (timeoutSeconds?: number) => {
-        return FetchClinkBeacon(this.pool, this.settings.relays, this.settings.toPubKey, timeoutSeconds || 10)
+        return FetchClinkBeacon(this.pool, this.settings.relays, this.settings.toPubKey, timeoutSeconds || 10, this.shutdown.signal)
     }
 
     Nenroll = async (opts?: NenrollOptions, timeoutSeconds?: number) => {
+        this.shutdown.signal.throwIfAborted()
         const timeout = timeoutSeconds || this.settings.defaultTimeoutSeconds
         const difficulty = opts?.difficulty ?? await this.beaconEnrollDifficulty()
-        return SendNenrollRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, difficulty, timeout)
+        return SendNenrollRequest(this.pool, this.settings.privateKey, this.settings.relays, this.settings.toPubKey, difficulty, timeout, this.shutdown.signal)
     }
 
-    /** Close relay connections. Call when done so the process can exit. */
+    /** Cancel owned requests and receipt listeners, then close relay connections. This instance cannot be reused. */
     Stop = () => {
+        if (this.shutdown.signal.aborted) {
+            return
+        }
+        this.shutdown.abort()
         this.pool.destroy()
     }
 
@@ -80,6 +87,7 @@ export class ClinkSDK {
             const beacon = await this.Nbeacon()
             return enrollDifficultyFromBeacon(beacon) ?? 0
         } catch {
+            this.shutdown.signal.throwIfAborted()
             return 0
         }
     }
