@@ -6,14 +6,16 @@
       "Length is a single byte (0–255), NOT 2-byte big-endian.",
       "Tag numbers and meanings are fixed — do not swap pubkey/relay; do not omit required tags.",
       "Tag 0 (pubkey) is 32 raw bytes, not a UTF-8 hex string.",
-      "ndebit tag 3 (k1) is 32 raw bytes like tag 0, not a UTF-8 hex string."
+      "ndebit tag 3 (k1) is 32 raw bytes like tag 0, not a UTF-8 hex string.",
+      "noffer tag 4 decoders accept 1 to 255 bytes, including leading zeroes, when the unsigned big-endian value is 0..9007199254740991 inclusive; reject empty or larger integer values.",
+      "noffer tag 4 encoders preserve four-byte encodings for values 0..4294967295, including explicit zero, and use the minimum byte width for larger safe integers."
     ],
     "noffer": {
       "0": "pubkey (32 bytes raw)",
       "1": "relay (utf8)",
       "2": "offer id (utf8)",
       "3": "priceType (optional, 1 byte: 0=Fixed, 1=Variable, 2=Spontaneous; omit with TLV 4/5 absent ⇒ Spontaneous)",
-      "4": "price (optional, 4-byte big-endian uint32; omit when TLV 5 is present)",
+      "4": "price (optional, nonempty unsigned big-endian integer 0..9007199254740991 inclusive; omit when TLV 5 is present)",
       "5": "currency (optional utf8, e.g. USD; requires Variable and excludes TLV 4)"
     },
     "ndebit": {
@@ -52,6 +54,26 @@
         "offer": "offer_abc",
         "priceType": 0,
         "price": 1000
+      }
+    },
+    "noffer_price_above_uint32": {
+      "encoded": "noffer1qszszqqqqqqqxqgqqgyk7enxv4e97ctzvvq3wamnwvaz7tmjv4kxz7fwv4uxzmtsd3jjucm0d5qzqudhpwkwfpnuszlxkzpagjwrwjr0xdusmu82fwlxa88xz7lwxjmx6e27pa",
+      "decoded": {
+        "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+        "relay": "wss://relay.example.com",
+        "offer": "offer_abc",
+        "priceType": 0,
+        "price": 4294967296
+      }
+    },
+    "noffer_price_max_safe_integer": {
+      "encoded": "noffer1qsr3llllllllllcrqyqqyzt0venx2ujlv93xxqghwaehxw309aex2mrp0yhx27rpd4cxcefwvdhk6qpqwxmsht8yse7gp0ntpq75f8phfphnx7gd7r4yh0nwnnnp00hrfdnqa75uxg",
+      "decoded": {
+        "pubkey": "71b70bace4867c80be6b083d449c37486f33790df0ea4bbe6e9ce617bee34b66",
+        "relay": "wss://relay.example.com",
+        "offer": "offer_abc",
+        "priceType": 0,
+        "price": 9007199254740991
       }
     },
     "ndebit": {

@@ -19,6 +19,9 @@ import {
 const fixtures = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../fixtures/bech32.json'), 'utf8')
 )
+const interop = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../test-vectors/interop.json'), 'utf8')
+)
 
 const utf8 = new TextEncoder()
 
@@ -33,6 +36,9 @@ const encodeNofferTlv = (fields) => {
   tlv[0] = [fields[0]]
   tlv[1] = [utf8.encode(fields[1])]
   tlv[2] = [utf8.encode(fields[2])]
+  for (const tag of [3, 4, 5]) {
+    if (fields[tag] !== undefined) tlv[tag] = [fields[tag]]
+  }
   const entries = []
   for (const [tag, values] of Object.entries(tlv).reverse()) {
     for (const value of values) {
@@ -139,6 +145,159 @@ describe('bech32 round-trip', () => {
   })
 })
 
+describe('published bech32 interop vectors', () => {
+  const encoders = { noffer: nofferEncode, ndebit: ndebitEncode, nmanage: nmanageEncode }
+
+  for (const [name, { encoded, decoded }] of Object.entries(interop.bech32_roundtrip)) {
+    it(`decodes and exactly re-encodes ${name}`, () => {
+      const type = encoded.slice(0, encoded.indexOf('1'))
+      const result = decodeBech32(encoded)
+      assert.equal(result.type, type)
+      for (const [field, value] of Object.entries(decoded)) {
+        assert.equal(result.data[field], value)
+      }
+      assert.equal(encoders[type](decoded), encoded)
+      assert.equal(encoders[type](result.data), encoded)
+    })
+  }
+})
+
+describe('noffer prices', () => {
+  const pointer = { ...fixtures.noffer.decoded, priceType: OfferPriceType.Fixed }
+  const fields = {
+    0: hexToBytes32(pointer.pubkey),
+    1: pointer.relay,
+    2: pointer.offer,
+  }
+
+  for (const [price, hex] of [
+    [0, '00000000'],
+    [1, '00000001'],
+    [2 ** 32 - 1, 'ffffffff'],
+    [2 ** 32, '0100000000'],
+    [2 ** 32 + 1, '0100000001'],
+    [Number.MAX_SAFE_INTEGER, '1fffffffffffff'],
+  ]) {
+    it(`losslessly round-trips price ${price} with compatible big-endian bytes`, () => {
+      const encoded = nofferEncode({ ...pointer, price })
+      assert.equal(encoded, encodeNofferTlv({
+        ...fields, 3: new Uint8Array([OfferPriceType.Fixed]), 4: hexToBytes(hex),
+      }))
+      assert.equal(decodeBech32(encoded).data.price, price)
+    })
+  }
+
+  it('keeps TLV 4 optional without changing the price type', () => {
+    const decoded = decodeBech32(nofferEncode({ ...pointer, price: undefined })).data
+    assert.equal(decoded.price, undefined)
+    assert.equal(decoded.priceType, OfferPriceType.Fixed)
+  })
+
+  it('rejects invalid numeric prices instead of truncating or omitting them', () => {
+    for (const price of [NaN, Infinity, -Infinity, -1, -0.5, 0.5, Number.MAX_SAFE_INTEGER + 1, 2 ** 64]) {
+      assert.throws(() => nofferEncode({ ...pointer, price }), /nonnegative safe integer/)
+    }
+  })
+
+  it('rejects empty and unsafe external price TLVs without rounding', () => {
+    for (const hex of ['', '20000000000000', '20000000000001', 'ffffffffffffff', 'ff'.repeat(255)]) {
+      // 0x20000000000001 is the external seven-byte integer 9007199254740993.
+      assert.throws(() => decodeBech32(encodeNofferTlv({ ...fields, 4: hexToBytes(hex) })), /price/)
+    }
+  })
+
+  it('accepts exact external integer widths and infers fixed pricing even for zero', () => {
+    for (const [hex, price] of [
+      ['00', 0], ['01', 1], ['0001', 1], ['001fffffffffffff', Number.MAX_SAFE_INTEGER],
+      ['00'.repeat(255), 0], ['00'.repeat(248) + '1fffffffffffff', Number.MAX_SAFE_INTEGER],
+    ]) {
+      const decoded = decodeBech32(encodeNofferTlv({ ...fields, 4: hexToBytes(hex) })).data
+      assert.equal(decoded.price, price)
+      assert.equal(decoded.priceType, OfferPriceType.Fixed)
+    }
+  })
+
+  it('checks currency and price presence, including zero and empty currency', () => {
+    for (const currency of ['USD', '']) {
+      const variable = { ...pointer, priceType: OfferPriceType.Variable, currency }
+      assert.throws(() => nofferEncode({ ...variable, price: 0 }), /currency excludes price/)
+      assert.throws(() => nofferEncode({ ...variable, price: undefined, priceType: OfferPriceType.Fixed }), /currency requires variable/)
+      const decoded = decodeBech32(nofferEncode({ ...variable, price: undefined })).data
+      assert.equal(decoded.currency, currency)
+      assert.equal(decoded.price, undefined)
+      assert.equal(decoded.priceType, OfferPriceType.Variable)
+      assert.throws(() => decodeBech32(encodeNofferTlv({
+        ...fields, 3: new Uint8Array([OfferPriceType.Variable]), 4: hexToBytes('00000000'), 5: utf8.encode(currency),
+      })), /currency excludes price/)
+      assert.throws(() => decodeBech32(encodeNofferTlv({
+        ...fields, 3: new Uint8Array([OfferPriceType.Fixed]), 5: utf8.encode(currency),
+      })), /currency requires variable/)
+      assert.equal(decodeBech32(encodeNofferTlv({ ...fields, 5: utf8.encode(currency) })).data.priceType, OfferPriceType.Variable)
+    }
+  })
+})
+
+describe('TLV encoding limits', () => {
+  const encoders = [
+    ['noffer', nofferEncode, fixtures.noffer.decoded, 'offer'],
+    ['ndebit', ndebitEncode, fixtures.ndebit.decoded, 'pointer'],
+    ['nmanage', nmanageEncode, fixtures.nmanage.decoded, 'pointer'],
+  ]
+
+  for (const [kind, encode, pointer, identifier] of encoders) {
+    for (const length of [0, 1, 31, 33, 64, 255]) {
+      it(`rejects a ${length}-byte ${kind} pubkey before encoding`, () => {
+        assert.throws(() => encode({ ...pointer, pubkey: 'ab'.repeat(length) }), /pubkey buffer should be 32 bytes/)
+      })
+    }
+
+    it(`preserves a valid 32-byte ${kind} pubkey and its fixture encoding`, () => {
+      const encoded = encode(pointer)
+      if (fixtures[kind].encoded) assert.equal(encoded, fixtures[kind].encoded)
+      assert.equal(decodeBech32(encoded).data.pubkey, pointer.pubkey)
+      assert.equal(encode({ ...pointer, pubkey: pointer.pubkey.toUpperCase() }), encoded)
+    })
+
+    for (const field of [identifier, 'relay']) {
+      it(`checks the UTF-8 byte length of ${kind} ${field}`, () => {
+        for (const value of ['a'.repeat(255), '\u00e9'.repeat(127) + 'a']) {
+          assert.equal(utf8.encode(value).length, 255)
+          const expected = { ...pointer, [field]: value }
+          const decoded = decodeBech32(encode(expected)).data
+          assert.equal(decoded[field], value)
+          assert.equal(decoded.pubkey, expected.pubkey)
+          assert.equal(decoded.relay, expected.relay)
+          assert.equal(decoded[identifier], expected[identifier])
+        }
+        for (const value of ['a'.repeat(256), 'a'.repeat(257), 'a'.repeat(512), '\u00e9'.repeat(128)]) {
+          assert.throws(() => encode({ ...pointer, [field]: value }), /TLV [12] value exceeds 255 bytes/)
+        }
+      })
+    }
+  }
+
+  it('also rejects an oversized noffer currency value', () => {
+    assert.throws(() => nofferEncode({
+      ...fixtures.noffer.decoded, price: undefined,
+      priceType: OfferPriceType.Variable, currency: 'a'.repeat(256),
+    }), /TLV 5 value exceeds 255 bytes/)
+  })
+
+  it('rejects an oversized identifier containing injected routing TLVs', () => {
+    const relay = utf8.encode('wss://injected.example')
+    const injected = [0, 32, ...new Uint8Array(32).fill(0x41), 1, relay.length, ...relay]
+    injected.push(127, 100, ...new Uint8Array(100).fill(0x41))
+    const padding = 256 - injected.length - 2
+    injected.push(127, padding, ...new Uint8Array(padding).fill(0x41))
+    const identifier = String.fromCharCode(...injected)
+    assert.equal(utf8.encode(identifier).length, 256)
+    // A wrapped length of zero would expose the identifier's bytes as routing TLVs.
+    for (const [, encode, pointer, field] of encoders) {
+      assert.throws(() => encode({ ...pointer, [field]: identifier }), /TLV 2 value exceeds 255 bytes/)
+    }
+  })
+})
+
 const withKelvinSign = (encoded) => {
   const upper = encoded.toUpperCase()
   const at = upper.indexOf('K', upper.lastIndexOf('1') + 1)
@@ -153,12 +312,36 @@ const nprofileWithK = () => {
 }
 
 describe('nip19 decode', () => {
+  it('accepts ASCII lower- and uppercase codes with the existing URI prefix handling', () => {
+    const profile = nprofileWithK()
+    for (const encoded of [profile, nip19.npubEncode('ab'.repeat(32)), nip19.nsecEncode(new Uint8Array(32).fill(1))]) {
+      const expected = nip19.decode(encoded)
+      for (const code of [encoded, encoded.toUpperCase()]) {
+        assert.deepEqual(nip19.decode(code), expected)
+        assert.deepEqual(nip19.decodeNostrURI(code), expected)
+        assert.deepEqual(nip19.decodeNostrURI(`nostr:${code}`), expected)
+      }
+      assert.deepEqual(nip19.decodeNostrURI(`NOSTR:${encoded}`), { type: 'invalid', data: null })
+    }
+  })
+
   it('rejects non-ASCII look-alike characters', () => {
     const encoded = nprofileWithK()
     assert.equal(nip19.decode(encoded).type, 'nprofile')
     assert.equal(nip19.decode(encoded.toUpperCase()).type, 'nprofile')
     assert.throws(() => nip19.decode(withKelvinSign(encoded)))
+    assert.deepEqual(nip19.decodeNostrURI(withKelvinSign(encoded)), { type: 'invalid', data: null })
+    assert.deepEqual(nip19.decodeNostrURI(`nostr:${withKelvinSign(encoded)}`), { type: 'invalid', data: null })
     assert.throws(() => ClinkSDK.fromNprofile(withKelvinSign(encoded), new Uint8Array(32)))
+  })
+
+  it('preserves invalid URI results and rejects invalid direct decode values', () => {
+    const encoded = nprofileWithK()
+    for (const value of ['', 'nostr:', 'not-bech32', encoded.slice(0, -1), `N${encoded.slice(1)}`, ` ${encoded}`, `${encoded}\n`, null, undefined, 42, {}]) {
+      assert.throws(() => nip19.decode(value))
+      assert.deepEqual(nip19.decodeNostrURI(value), { type: 'invalid', data: null })
+      assert.deepEqual(nip19.decodeNostrURI(`nostr:${value}`), { type: 'invalid', data: null })
+    }
   })
 
   it('rejects the same trick in noffer decode', () => {
