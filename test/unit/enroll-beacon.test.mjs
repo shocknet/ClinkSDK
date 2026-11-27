@@ -100,6 +100,15 @@ describe('beacon parse', () => {
     })), null)
   })
 
+  it('accepts clink-node alongside a legacy d-tag', () => {
+    const beacon = parseClinkBeaconEvent(signBeacon({
+      tags: [['d', 'Lightning.Pub'], ['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION]],
+      content: JSON.stringify({ enroll_difficulty: 18 }),
+    }))
+    assert.ok(beacon)
+    assert.equal(enrollDifficultyFromBeacon(beacon, now * 1000), 18)
+  })
+
   it('uses enroll_difficulty only while the beacon is fresh', () => {
     const beacon = parseClinkBeaconEvent(signBeacon({
       tags: [['d', CLINK_BEACON_D_TAG], ['clink_version', CLINK_VERSION], ['operator', 'CD'.repeat(32)]],
@@ -138,7 +147,7 @@ describe('beacon parse', () => {
       sig: '11'.repeat(64),
     }
     const pool = {
-      subscribeMany(_relays, _filters, opts) {
+      subscribe(_relays, _filter, opts) {
         queueMicrotask(() => {
           opts.onevent(spoof)
           opts.onevent(signed)
@@ -186,7 +195,7 @@ describe('enroll remine', () => {
     const published = []
     let onevent = null
     const pool = {
-      subscribeMany(_relays, _filters, opts) {
+      subscribe(_relays, _filter, opts) {
         onevent = opts.onevent
         return { close: () => {} }
       },
@@ -218,7 +227,7 @@ describe('enroll remine', () => {
     const published = []
     let onevent = null
     const pool = {
-      subscribeMany(_relays, _filters, opts) {
+      subscribe(_relays, _filter, opts) {
         onevent = opts.onevent
         return { close: () => {} }
       },
@@ -244,7 +253,7 @@ describe('enroll remine', () => {
   it('throws before mining when caller asks above the client cap', async () => {
     const published = []
     const pool = {
-      subscribeMany() { return { close: () => {} } },
+      subscribe() { return { close: () => {} } },
       publish(_relays, event) {
         published.push(event)
         return [Promise.resolve('ok')]

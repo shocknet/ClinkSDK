@@ -1,4 +1,4 @@
-import { AbstractSimplePool } from "nostr-tools/lib/types/pool"
+import type { AbstractSimplePool } from "nostr-tools/lib/types/abstract-pool"
 import { Event, verifyEvent } from "nostr-tools"
 import {
     BEACON_FUTURE_SKEW_SECONDS,
@@ -93,9 +93,9 @@ export const parseClinkBeaconContent = (raw: unknown): ClinkBeaconContent => {
     return content
 }
 
-const dTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "d")?.[1]
-const versionTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "clink_version")?.[1]
-const operatorTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "operator")?.[1]
+const dTagValues = (tags: string[][]): string[] => tags.filter(t => t[0] === "d" && t[1]).map(t => t[1])
+const versionTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "clink_version" && t[1])?.[1]
+const operatorTag = (tags: string[][]): string | undefined => tags.find(t => t[0] === "operator" && t[1])?.[1]
 
 export const parseClinkBeaconEvent = (event: Event): ClinkBeacon | null => {
     if (!verifyEvent(event)) {
@@ -104,7 +104,7 @@ export const parseClinkBeaconEvent = (event: Event): ClinkBeacon | null => {
     if (event.kind !== CLINK_BEACON_KIND) {
         return null
     }
-    if (dTag(event.tags) !== CLINK_BEACON_D_TAG) {
+    if (!dTagValues(event.tags).includes(CLINK_BEACON_D_TAG)) {
         return null
     }
     if (versionTag(event.tags) !== CLINK_VERSION) {
@@ -152,39 +152,65 @@ export const FetchClinkBeacon = async (
     relays: string[],
     servicePub: string,
     timeoutSeconds = 10,
+    signal?: AbortSignal,
 ): Promise<ClinkBeacon | null> => {
+    signal?.throwIfAborted()
     const expectedPub = servicePub.toLowerCase()
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
         let settled = false
         let best: Event | null = null
         let closer = { close: () => { } }
-        const finish = () => {
+        const finish = (error?: unknown) => {
             if (settled) {
                 return
             }
             settled = true
             clearTimeout(timer)
+            signal?.removeEventListener('abort', onAbort)
             closer.close()
-            resolve(best ? parseClinkBeaconEvent(best) : null)
+            if (error !== undefined) {
+                reject(error)
+            } else {
+                resolve(best ? parseClinkBeaconEvent(best) : null)
+            }
         }
-        const timer = setTimeout(finish, timeoutSeconds * 1000)
-        closer = pool.subscribeMany(relays, [{
-            kinds: [CLINK_BEACON_KIND],
-            authors: [expectedPub],
-            "#d": [CLINK_BEACON_D_TAG],
-        }], {
-            onevent: (event: Event) => {
-                if (event.pubkey.toLowerCase() !== expectedPub) {
-                    return
-                }
-                if (!verifyEvent(event)) {
-                    return
-                }
-                if (!best || event.created_at > best.created_at) {
-                    best = event
-                }
-            },
-            oneose: finish,
-        })
+        const onAbort = () => finish(signal!.reason)
+        const timer = setTimeout(() => finish(), timeoutSeconds * 1000)
+        signal?.addEventListener('abort', onAbort, { once: true })
+        if (signal?.aborted) {
+            onAbort()
+            return
+        }
+        try {
+            const subscription = pool.subscribe(relays, {
+                kinds: [CLINK_BEACON_KIND],
+                authors: [expectedPub],
+                "#d": [CLINK_BEACON_D_TAG],
+            }, {
+                onevent: (event: Event) => {
+                    if (settled || signal?.aborted) {
+                        return
+                    }
+                    if (event.pubkey.toLowerCase() !== expectedPub) {
+                        return
+                    }
+                    if (!verifyEvent(event)) {
+                        return
+                    }
+                    if (!best || event.created_at > best.created_at) {
+                        best = event
+                    }
+                },
+                oneose: () => signal?.aborted ? onAbort() : finish(),
+            })
+            // Callbacks (including abort) may run before subscribe returns.
+            if (settled) {
+                subscription.close()
+            } else {
+                closer = subscription
+            }
+        } catch (error) {
+            finish(error)
+        }
     })
 }
