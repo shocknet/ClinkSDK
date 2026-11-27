@@ -16,7 +16,7 @@ export type NmanageResponse = NmanageSuccess | NmanageFailure
 export type OfferFields = {
     label: string,
     price_sats: number,
-    callback_url: string,
+    callback_url?: string | null,
     payer_data: string[]
 }
 
@@ -47,7 +47,9 @@ export const validateOfferFields = (fields: unknown): OfferFields => {
     if (typeof fields !== 'object' || fields === null) throw new Error('fields must be an object')
     if (!('label' in fields) || typeof fields.label !== 'string') throw new Error('label must be a string')
     if (!('price_sats' in fields) || typeof fields.price_sats !== 'number') throw new Error('price_sats must be a number')
-    if (!('callback_url' in fields) || typeof fields.callback_url !== 'string') throw new Error('callback_url must be a string')
+    if ('callback_url' in fields && fields.callback_url !== undefined && fields.callback_url !== null && typeof fields.callback_url !== 'string') {
+        throw new Error('callback_url must be a string or null if present')
+    }
     if (!('payer_data' in fields) || !Array.isArray(fields.payer_data)) throw new Error('payer_data must be an array')
     if (fields.payer_data.some(item => typeof item !== 'string')) throw new Error('payer_data must be an array of strings')
     return fields as OfferFields
@@ -167,16 +169,16 @@ export const newNmanageFilter = (publicKey: string, eventId: string) => ({
 })
 type CreateOfferData = {
     price_sats?: number,
-    callback_url?: string,
+    callback_url?: string | null,
     payer_data?: string[]
 }
 export const newCreateRequest = (label: string, data: CreateOfferData = {}, pointer?: string): NmanageCreateOffer => {
     const offer: OfferFields = {
         label,
-        callback_url: data.callback_url || "",
         payer_data: data.payer_data || [],
         price_sats: data.price_sats || 0
     }
+    if (data.callback_url !== undefined) offer.callback_url = data.callback_url
     return {
         resource: 'offer',
         action: 'create',
@@ -188,17 +190,18 @@ export const newCreateRequest = (label: string, data: CreateOfferData = {}, poin
 }
 
 export const newUpdateRequest = (updatedOffer: OfferData): NmanageUpdateOffer => {
+    const fields: OfferFields = {
+        label: updatedOffer.label,
+        price_sats: updatedOffer.price_sats,
+        payer_data: updatedOffer.payer_data,
+    }
+    if (updatedOffer.callback_url !== undefined) fields.callback_url = updatedOffer.callback_url
     return {
         resource: 'offer',
         action: 'update',
         offer: {
             id: updatedOffer.id,
-            fields: {
-                label: updatedOffer.label,
-                price_sats: updatedOffer.price_sats,
-                callback_url: updatedOffer.callback_url,
-                payer_data: updatedOffer.payer_data
-            }
+            fields,
         }
     }
 }

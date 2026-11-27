@@ -334,6 +334,8 @@ For validating inbound/outbound CLINK payloads (e.g. server-side request checks)
 - `validateNofferData`, `validateNdebitData`, `validateK1`, `validateBudgetFrequency`
 - `validateNmanageRequest` and per-action helpers: `validateNmanageCreateOffer`, `validateNmanageUpdateOffer`, `validateNmanageDeleteOffer`, `validateNmanageGetOffer`, `validateNmanageListOffers`, `validateOfferFields`
 
+Manage create/update requests require `label`, `price_sats`, and `payer_data` inside `offer.fields`. `callback_url` is optional: omission on create means no callback; omission on update preserves it; `null` or `""` clears it. The create builder supplies `0` and `[]` for omitted price and payer-field names, but never supplies a label or callback. Updates require `offer.id`.
+
 `validateNofferData`, `validateNdebitData`, and `validateBudgetFrequency` return detached, normalized objects rather than the original input. They read recognized values once, omit undefined optional fields and unknown top-level fields, and copy nested payer-data or frequency values. Offer and debit sending serialize this validated payload, not caller-defined `toJSON()` output.
 
 When publishing to multiple relays, one rejection does not abort another relay's accepted request. Publication fails only when all attempts fail; an empty relay list is rejected. A timeout or publication error is not proof that the host did not act, so callers must not blindly retry payments.
